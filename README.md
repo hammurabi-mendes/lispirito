@@ -4,8 +4,9 @@ A portable LISP implementation for memory-constrained systems. It works from MOS
 
 ## Project Goals
 
-- Binary size should be smaller than 32K - 300B on MOS 6502, yet compatible with modern architectures.
+- Binary size smaller than 32K - 300B on MOS 6502, yet capable with modern architectures.
 - Macro expansion support for syntatic sugar.
+- Depend on a minimal set of `libc` functions.
 - The code should be small and pedagogical, *easy to understand*.
 
 ## Notably missing features
