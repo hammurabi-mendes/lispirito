@@ -827,30 +827,6 @@ LispNodeRC eval_gen2(const LispNodeRC &input, LispNodeRC *environment) {
 			else {
 				return (output1->number_r >= output2->number_r) ? atom_true : atom_false;
 			}
-		case OP_AND:
-			if(!output1->is_boolean() || !output2->is_boolean()) {
-				fputs("and/or requires boolean arguments\n", stdout);
-
-				return nullptr;
-			}
-
-			if((output1 == atom_true) && (output2 == atom_true)) {
-				return atom_true;
-			}
-
-			return atom_false;
-		case OP_OR:
-			if(!output1->is_boolean() || !output2->is_boolean()) {
-				fputs("and/or requires boolean arguments\n", stdout);
-
-				return nullptr;
-			}
-
-			if((output1 == atom_true) || (output2 == atom_true)) {
-				return atom_true;
-			}
-
-			return atom_false;
     	case OP_STRING_APPEND:
 			if(!output1->is_string() || !output2->is_string()) {
 				fputs("string-append needs two strings\n", stdout);
@@ -1102,6 +1078,55 @@ LispNodeRC eval_lambda_application(const LispNodeRC &input, LispNodeRC *environm
 	}
 }
 
+LispNodeRC eval_logic2(const LispNodeRC &input, LispNodeRC *environment) {
+	const LispNodeRC &operator_name = input->get_head()->item;
+
+	if(count_members(input) != 3) {
+		fputs("and/or need two arguments\n", stdout);
+
+		return nullptr;
+	}
+
+	const LispNodeRC &argument1 = input->get_head()->next->item;
+	const LispNodeRC &argument2 = input->get_head()->next->next->item;
+
+	LispNodeRC output1 = eval_expression(argument1, environment);
+
+	if(output1 == nullptr) {
+		return nullptr;
+	}
+
+	if(!output1->is_boolean()) {
+		fputs("and/or requires boolean arguments\n", stdout);
+
+		return nullptr;
+	}
+
+	int operation_index = get_operation_index(operator_name->string);
+
+	if(operation_index == OP_AND && output1 == atom_false) {
+		return atom_false;
+	}
+
+	if(operation_index == OP_OR && output1 == atom_true) {
+		return atom_true;
+	}
+
+	LispNodeRC output2 = eval_expression(argument2, environment);
+
+	if(output2 == nullptr) {
+		return nullptr;
+	}
+
+	if(!output2->is_boolean()) {
+		fputs("and/or requires boolean arguments\n", stdout);
+
+		return nullptr;
+	}
+
+	return output2;
+}
+
 LispNodeRC eval_subst(const LispNodeRC &input, LispNodeRC *environment) {
 	if(count_members(input) != 4) {
 		fputs("subst needs three arguments: old, new, expression\n", stdout);
@@ -1177,8 +1202,8 @@ EvalFunction eval_functions[] = {
 	eval_gen2,
 
     // Logic
-	eval_gen2,
-	eval_gen2,
+	eval_logic2,
+	eval_logic2,
 	eval_gen1,
 
     // Environment and Lambda support

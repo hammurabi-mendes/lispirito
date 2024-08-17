@@ -22,7 +22,7 @@ char *lambdas[] {
 "(define foldr (lambda (binfunc acc list)"
 "    (cond ("
 "        ((eq? list '()) acc)"
-"        (#t (binfunc (car list) (foldr binfunc (cdr list) acc)))"
+"        (#t (binfunc (car list) (foldr binfunc acc (cdr list))))"
 "    ))"
 "))",
 
