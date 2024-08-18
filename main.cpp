@@ -10,8 +10,8 @@
 #include "extra.h"
 #include "LispNode.h"
 
-constexpr int MAX_EXPRESSION_SIZE = 256;
-constexpr int MAX_TOKEN_SIZE = 256;
+constexpr unsigned int MAX_EXPRESSION_SIZE = 256;
+constexpr unsigned int MAX_TOKEN_SIZE = 256;
 
 constexpr int PARSE_CHARACTER = 0x1;
 constexpr int PARSE_QUOTED = 0x2;
@@ -47,10 +47,10 @@ int get_operation_index(const char *string) {
 // Make operators
 
 LispNodeRC make_operator(char *operator_name) {
-	LispNodeRC operator_member = new LispNode(LispType::AtomPure);
-	operator_member->string = strdup(operator_name);
+	LispNodeRC result = new LispNode(LispType::AtomPure);
+	result->string = strdup(operator_name);
 
-	return operator_member;
+	return result;
 }
 
 LispNodeRC make1(const LispNodeRC &first) {
@@ -95,27 +95,31 @@ LispNodeRC make_cons(const LispNodeRC &first, const LispNodeRC &second) {
 	return result;
 }
 
-LispNodeRC make_cdr(const LispNodeRC &previous) {
-	const BoxRC &previous_second_box = previous->get_head()->next;
+const LispNodeRC &make_car(const LispNodeRC &list) {
+	return list->get_head()->item;
+}
 
-	if(previous_second_box == nullptr) {
+LispNodeRC make_cdr(const LispNodeRC &list) {
+	const BoxRC &second_element_box = list->get_head()->next;
+
+	if(second_element_box == nullptr) {
 		return list_empty;
 	}
 
 	LispNodeRC result = new LispNode(LispType::List);
-	result->get_head() = previous_second_box;
+	result->get_head() = second_element_box.get_pointer();
 
 	return result;
 }
 
-LispNodeRC make_query(const LispNodeRC &first, const LispNodeRC &second) {
-	for(BoxRC current_definition = second->get_head(); current_definition != nullptr; current_definition = current_definition->next) {
-		const LispNodeRC &current_pair = current_definition->item;
+LispNodeRC make_query(const LispNodeRC &term, const LispNodeRC &list) {
+	for(Box *current_definition_box = list->get_head_pointer(); current_definition_box != nullptr; current_definition_box = current_definition_box->get_next_pointer()) {
+		const LispNodeRC &current_pair = current_definition_box->item;
 
 		const LispNodeRC &key = current_pair->get_head()->item;
 		const LispNodeRC &value = current_pair->get_head()->next->item;
 
-		if(*first == *key) {
+		if(*term == *key) {
 			return value;
 		}
 	}
@@ -130,12 +134,12 @@ LispNodeRC make_substitution(const LispNodeRC &old_symbol, const LispNodeRC &new
 
 	LispNodeRC output = new LispNode(LispType::List);
 
-	BoxRC last_box = nullptr;
+	Box *last_box = nullptr;
 
-	for(BoxRC current_expression = expression->get_head(); current_expression != nullptr; current_expression = current_expression->next) {
-		LispNodeRC substituted = make_substitution(old_symbol, new_symbol, current_expression->item);
+	for(Box *current_expression_box = expression->get_head_pointer(); current_expression_box != nullptr; current_expression_box = current_expression_box->get_next_pointer()) {
+		LispNodeRC substituted = make_substitution(old_symbol, new_symbol, current_expression_box->item);
 
-		BoxRC substituted_box = new Box(substituted); 
+		Box *substituted_box = new Box(substituted); 
 
 		if(last_box == nullptr) {
 			output->get_head() = substituted_box;
@@ -365,11 +369,11 @@ LispNodeRC parse_expression(char *buffer, size_t buffer_length, size_t &position
 		LispNodeRC result = new LispNode(LispType::List);
 		result->get_head() = nullptr;
 
-		BoxRC last_box = nullptr;
+		Box *last_box = nullptr;
 		LispNodeRC member;
 
 		while((member = parse_expression(buffer, buffer_length, position, error)) != nullptr) {
-			BoxRC member_box = new Box(member);
+			Box *member_box = new Box(member);
 
 			if(last_box == nullptr) {
 				result->get_head() = member_box;
@@ -420,7 +424,7 @@ LispNodeRC parse_expression(char *buffer) {
 size_t count_members(const LispNodeRC &list) {
 	size_t count = 0;
 
-	for(BoxRC current = list->get_head(); current != nullptr; current = current->next) {
+	for(Box *current_box = list->get_head_pointer(); current_box != nullptr; current_box = current_box->get_next_pointer()) {
 		count++;
 	}
 
@@ -450,21 +454,21 @@ LispNodeRC eval_cond(const LispNodeRC &input, LispNodeRC *environment) {
 
 	const LispNodeRC &argument1 = input->get_head()->next->item;
 
-	for(BoxRC current = argument1->get_head(); current != nullptr; current = current->next) {
-		if(!current->item->is_list()) {
+	for(Box *current_box = argument1->get_head_pointer(); current_box != nullptr; current_box = current_box->get_next_pointer()) {
+		if(!current_box->item->is_list()) {
 			fputs("cond needs its second argument to be a list of pairs\n", stdout);
 
 			return nullptr;
 		}
 
-		if(count_members(current->item) != 2) {
+		if(count_members(current_box->item) != 2) {
 			fputs("cond needs its second argument to be a list of pairs\n", stdout);
 
 			return nullptr;
 		}
 
-		const LispNodeRC &condition = current->item->get_head()->item;
-		const LispNodeRC &resolution = current->item->get_head()->next->item;
+		const LispNodeRC &condition = current_box->item->get_head()->item;
+		const LispNodeRC &resolution = current_box->item->get_head()->next->item;
 
 		LispNodeRC result = eval_expression(condition, environment);
 
@@ -567,9 +571,7 @@ LispNodeRC eval_gen1(const LispNodeRC &input, LispNodeRC *environment) {
 
 	switch(operation_index) {
 		case OP_CAR:
-			result = output1->get_head()->item;
-
-			return result;
+			return make_car(output1);
 		case OP_CDR:
 			return make_cdr(output1);
 		case OP_ATOM_Q:
@@ -647,7 +649,7 @@ LispNodeRC eval_gen1(const LispNodeRC &input, LispNodeRC *environment) {
 				return nullptr;
 			}
 
-			char string_buffer[128];
+			char string_buffer[MAX_NUMERIC_STRING_LENGTH];
 
 			if(output1->is_numeric_integral()) {
 				get_integral_string(output1->number_i, string_buffer);
@@ -888,8 +890,8 @@ LispNodeRC eval_begin(const LispNodeRC &input, LispNodeRC *environment) {
 
 	LispNodeRC output;
 
-	for(BoxRC current_expression = input->get_head()->next; current_expression != nullptr; current_expression = current_expression->next) {
-		if((output = eval_expression(current_expression->item, &new_environment)) == nullptr) {
+	for(Box *current_expression_box = input->get_head_pointer()->get_next_pointer(); current_expression_box != nullptr; current_expression_box = current_expression_box->get_next_pointer()) {
+		if((output = eval_expression(current_expression_box->item, &new_environment)) == nullptr) {
 			return nullptr;
 		}
 	}
@@ -960,8 +962,8 @@ LispNodeRC eval_lambda(const LispNodeRC &input, LispNodeRC *environment) {
 		return nullptr;
 	}
 
-	for(BoxRC current_parameter = argument1->get_head(); current_parameter != nullptr; current_parameter = current_parameter->next) {
-		if(!current_parameter->item->is_atom() || !current_parameter->item->is_pure()) {
+	for(Box *current_parameter_box = argument1->get_head_pointer(); current_parameter_box != nullptr; current_parameter_box = current_parameter_box->get_next_pointer()) {
+		if(!current_parameter_box->item->is_atom() || !current_parameter_box->item->is_pure()) {
 			fputs("lambda needs two arguments ((p1 ... pN) expression), where p1 ... pN are pure atoms\n", stdout);
 
 			return nullptr;
@@ -976,7 +978,7 @@ LispNodeRC eval_lambda_application(const LispNodeRC &input, LispNodeRC *environm
 
 	LispNodeRC output = eval_lambda(lambda, environment);
 
-	bool lambda_subst = (strcmp(lambda->get_head()->item->string, "macro") == 0);
+	bool lambda_subst = (get_operation_index(lambda->get_head()->item->string) == OP_MACRO);
 
 	if(output == nullptr) {
 		return nullptr;
@@ -994,25 +996,25 @@ LispNodeRC eval_lambda_application(const LispNodeRC &input, LispNodeRC *environm
 	//     Eager evaluation: creates a new environment binding parameters to their eagerly-evaluated arguments
 	LispNodeRC new_environment = (*environment);
 
-	BoxRC current_parameter = lambda_argument1->get_head();
-	BoxRC current_argument = input->get_head()->next;
+	BoxRC current_parameter_box = lambda_argument1->get_head();
+	BoxRC current_argument_box = input->get_head()->next;
 
-	while(current_parameter != nullptr || current_argument != nullptr) {
-		if(current_parameter == nullptr) {
+	while(current_parameter_box != nullptr || current_argument_box != nullptr) {
+		if(current_parameter_box == nullptr) {
 			fputs("lambda application has extra arguments\n", stdout);
 
 			return nullptr;
 		}
 
-		if(current_argument == nullptr) {
+		if(current_argument_box == nullptr) {
 			fputs("lambda application has missing arguments\n", stdout);
 
 			return nullptr;
 		}
 
 		// Evaluate the argument using the old environment
-		LispNodeRC parameter = current_parameter->item;
-		LispNodeRC argument = current_argument->item;
+		LispNodeRC parameter = current_parameter_box->item;
+		LispNodeRC argument = current_argument_box->item;
 
 		if(!parameter->is_atom() || !parameter->is_pure()) {
 			fputs("lambda application needs two arguments (pure atom, expression)\n", stdout);
@@ -1022,17 +1024,17 @@ LispNodeRC eval_lambda_application(const LispNodeRC &input, LispNodeRC *environm
 
 		if(strcmp(parameter->string, ".") == 0) {
 			// Get the name of the other parameters and bind them into a list
-			current_parameter = current_parameter->next;
-			parameter = current_parameter->item;
+			current_parameter_box = current_parameter_box->next;
+			parameter = current_parameter_box->item;
 			
 			LispNodeRC list_rest = new LispNode(LispType::List);
-			BoxRC last_box = nullptr;
+			Box *last_box = nullptr;
 
-			while(current_argument != nullptr) {
-				argument = current_argument->item;
+			while(current_argument_box != nullptr) {
+				argument = current_argument_box->item;
 
 				LispNodeRC eval_argument = eval_expression(argument, environment);
-				BoxRC member_box = new Box(eval_argument);
+				Box *member_box = new Box(eval_argument);
 
 				if(last_box == nullptr) {
 					list_rest->get_head() = member_box;
@@ -1043,13 +1045,13 @@ LispNodeRC eval_lambda_application(const LispNodeRC &input, LispNodeRC *environm
 
 				last_box = member_box;
 				
-				current_argument = current_argument->next;
+				current_argument_box = current_argument_box->next;
 			}
 
 			LispNodeRC quote = make_operator("quote");
 			LispNodeRC quote_list_rest = make2(quote, list_rest);
 
-			current_argument = new Box(quote_list_rest);
+			current_argument_box = new Box(quote_list_rest);
 			argument = quote_list_rest;
 		}
 
@@ -1057,8 +1059,6 @@ LispNodeRC eval_lambda_application(const LispNodeRC &input, LispNodeRC *environm
 			new_expression = make_substitution(parameter, argument, new_expression);
 		}
 		else {
-			// [McCarthy implementable] Can be made with primitive operations only: cons
-
 			// Resolve the argument in the old environment
 			LispNodeRC eval_argument = eval_expression(argument, environment);
 
@@ -1066,8 +1066,8 @@ LispNodeRC eval_lambda_application(const LispNodeRC &input, LispNodeRC *environm
 			new_environment = make_cons(make2(parameter, eval_argument), new_environment);
 		}
 
-		current_parameter = current_parameter->next;
-		current_argument = current_argument->next;
+		current_parameter_box = current_parameter_box->next;
+		current_argument_box = current_argument_box->next;
 	}
 
 	if(lambda_subst) {
@@ -1263,7 +1263,6 @@ LispNodeRC eval_expression(const LispNodeRC &input, LispNodeRC *environment) {
 			return nullptr;
 		}
 
-		// [McCarthy implementable] Can be made with primitive operations only: cons, cdr
 		// Change the input to point to the other lambda and evaluaute again
 		LispNodeRC parameters = make_cdr(input);
 		LispNodeRC other_input = make_cons(other_first, parameters);

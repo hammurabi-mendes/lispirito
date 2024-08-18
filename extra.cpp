@@ -8,7 +8,7 @@
 #include "extra.h"
 
 void print_integral(Integral n) {
-    char buffer[128];
+    char buffer[MAX_NUMERIC_STRING_LENGTH];
 
     get_integral_string(n, buffer);
 
@@ -55,7 +55,7 @@ void get_integral_string(Integral n, char *buffer) {
 }
 
 void print_real(Real f) {
-    char buffer[128];
+    char buffer[MAX_NUMERIC_STRING_LENGTH];
 
     get_real_string(f, buffer);
 
@@ -96,7 +96,7 @@ Real atof(char *input) {
 void get_real_string(Real f, char *buffer) {
     buffer[0] = '\0';
 
-    char buffer_internal[128];
+    char buffer_internal[MAX_NUMERIC_STRING_LENGTH];
 
     get_real_string(f.as_i(), buffer_internal);
     strcat(buffer, buffer_internal);
@@ -122,7 +122,7 @@ void get_real_string(Real f, char *buffer) {
 
     buffer[position] = '\0';
 
-    char buffer_internal[128];
+    char buffer_internal[MAX_NUMERIC_STRING_LENGTH];
 
     get_integral_string(integral_part, buffer_internal);
     strcat(buffer, buffer_internal);

@@ -44,6 +44,10 @@ public:
 		return *head;
 	}
 
+	Box *get_head_pointer() const {
+		return head->get_pointer();
+	}
+
 	bool operator==(const LispNode &other) const;
 
 	bool is_atom();
@@ -66,6 +70,10 @@ struct Box {
 
 	Box(const LispNodeRC &item): item{item}, next{nullptr} {}
 	Box(LispNodeRC &&item) noexcept: item{item}, next{nullptr} {}
+
+	Box *get_next_pointer() const {
+		return next.get_pointer();
+	}
 };
 
 #endif /* LISP_NODE_H */

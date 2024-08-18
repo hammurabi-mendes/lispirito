@@ -3,6 +3,8 @@
 
 #include "types.h"
 
+constexpr unsigned int MAX_NUMERIC_STRING_LENGTH = 128;
+
 void get_integral_string(Integral n, char *buffer);
 void get_real_string(Real f, char *buffer);
 
