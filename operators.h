@@ -13,6 +13,7 @@ enum LispOperation {
     OP_ASSOC,
     OP_SUBST,
 
+    OP_PAIR_Q,
     OP_CHAR_Q,
     OP_BOOLEAN_Q,
     OP_STRING_Q,
@@ -74,6 +75,7 @@ const char *operator_names[] = {
     "subst",
 
     // Type support
+    "pair?",
     "char?",
     "boolean?",
     "string?",

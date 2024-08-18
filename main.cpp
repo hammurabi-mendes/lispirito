@@ -576,6 +576,8 @@ LispNodeRC eval_gen1(const LispNodeRC &input, LispNodeRC *environment) {
 			return make_cdr(output1);
 		case OP_ATOM_Q:
 			return output1->is_atom() ? atom_true : atom_false;
+		case OP_PAIR_Q:
+			return (output1->is_atom() || output1 == list_empty) ? atom_false : atom_true;
 		case OP_CHAR_Q:
 			return output1->is_character() ? atom_true : atom_false;
 		case OP_BOOLEAN_Q:
@@ -1165,6 +1167,7 @@ EvalFunction eval_functions[] = {
 	eval_subst,
 
     // Type support
+	eval_gen1,
 	eval_gen1,
 	eval_gen1,
 	eval_gen1,

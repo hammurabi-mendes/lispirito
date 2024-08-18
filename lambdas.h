@@ -1,7 +1,7 @@
 #ifndef LAMBDAS_H
 #define LAMBDAS_H
 
-constexpr int NUMBER_INITIAL_LAMBDAS = 6;
+constexpr int NUMBER_INITIAL_LAMBDAS = 12;
 
 char *lambdas[] {
 
@@ -34,14 +34,27 @@ char *lambdas[] {
 "    ))"
 "))",
 
-"(define length (lambda (list)"
+"(define length (lambda (l) (foldl (lambda (first acc) (+ 1 acc)) 0 l)))",
+
+"(define reverse (lambda (l) (foldl cons '() l)))",
+
+"(define append (lambda (l1 l2) (foldr cons l2 l1)))",
+
+"(define list (lambda (. items) (foldl cons '() items)))",
+
+"(define list? (lambda (input)"
 "    (cond ("
-"        ((eq? list '()) 0)"
-"        (#t (+ 1 (length (cdr list))))"
+"        ((atom? input) #f)"
+"        ((eq? input '()) #t)"
+"        (#t (list? (cdr input)))"
 "    ))"
 "))",
 
-"(define apply (lambda (op . list) (foldl op (car list) (cdr list))))"
+"(define apply (lambda (op . list) (foldl op (car list) (cdr list))))",
+
+"(define abs (lambda (x) (if (> x 0) x (neg x))))",
+"(define modulo (lambda (x m) (- x (* (/ x m) m))))"
+
 };
 
 #endif /* LAMBDAS_H */
