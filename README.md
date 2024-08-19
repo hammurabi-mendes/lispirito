@@ -4,15 +4,14 @@ A portable LISP implementation for memory-constrained systems. It works from MOS
 
 ## Project Goals
 
-- Binary size smaller than 32K - 300B on MOS 6502, yet capable with modern architectures.
+- Binary size smaller than 31.5K on MOS 6502, yet capable with modern architectures.
 - Macro expansion support for syntatic sugar.
 - Depend on a minimal set of `libc` functions.
 - The code should be small and pedagogical, *easy to understand*.
 
 ## Notably missing features
 
-- *Many functions from R7RS-small* are intentionally left out. It should be fairly straightfoward to extend the implementation
-  to add them, but that would increase the footprint past 32K - 300B.
+- Although a good subset of R7RS-small functions are covered, many are left out due to space (notably vectors and maps). It should be fairly straightfoward to extend the implementation to add them, but that would increase the footprint past our size goal of 31.5K.
 
 ## Getting started
 
