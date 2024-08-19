@@ -1425,9 +1425,9 @@ int main(int argc, char **argv) {
 
 	environment = list_empty;
 
- #ifndef TARGET_6502
+ #ifdef INITIAL_ENVIRONMENT
 	environment = get_initial_environment();
- #endif /* TARGET_6502 */
+ #endif /* INITIAL_ENVIROMENT */
 
 	// Read-Eval-Print loop
 

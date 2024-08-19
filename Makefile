@@ -1,7 +1,7 @@
 # For 6502
 
 ifeq ($(TARGET_6502), 1)
-CXX=../llvm-mos/bin/mos-eater-clang++
+CXX=../llvm-mos/bin/mos-c64-clang++
 else
 CXX=clang++
 endif
@@ -14,7 +14,7 @@ CFLAGS+=-DTARGET_6502
 endif
 
 ifeq ($(TARGET_6502), 1)
-STANDARD=-std=c++14
+STANDARD=-std=c++20
 OPTIMIZATION=-Os
 SANITIZE=
 else
