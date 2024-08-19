@@ -1,7 +1,7 @@
 #ifndef LAMBDAS_H
 #define LAMBDAS_H
 
-constexpr int NUMBER_INITIAL_LAMBDAS = 12;
+constexpr int NUMBER_INITIAL_LAMBDAS = 14;
 
 char *lambdas[] {
 
@@ -50,10 +50,21 @@ char *lambdas[] {
 "    ))"
 "))",
 
-"(define apply (lambda (op . list) (foldl op (car list) (cdr list))))",
-
 "(define abs (lambda (x) (if (> x 0) x (neg x))))",
-"(define modulo (lambda (x m) (- x (* (/ x m) m))))"
+"(define modulo (lambda (x m) (- x (* (/ x m) m))))",
+
+"(define list->string (lambda (list)"
+"    (foldl (lambda (first acc) (string-append (make-string 1 first) acc)) \"\" (reverse list))"
+"))",
+
+"(define string->list (lambda (str)"
+"    (cond ("
+"        ((eq? str \"\") '())"
+"        (#t (cons (string-ref str 0) (string->list (substring str 1 (string-length str)))))"
+"    ))"
+"))",
+
+"(define apply (lambda (op . list) (foldl op (car list) (cdr list))))"
 
 };
 

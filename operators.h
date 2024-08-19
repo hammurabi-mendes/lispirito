@@ -29,6 +29,9 @@ enum LispOperation {
     OP_STRING_LENGTH,
     OP_STRING_APPEND,
     OP_STRING_REF,
+    OP_STRING_SET_E,
+    OP_MAKE_STRING,
+    OP_SUBSTRING,
 
     OP_DISPLAY,
     OP_NEWLINE,
@@ -52,6 +55,7 @@ enum LispOperation {
 
     OP_BEGIN,
     OP_DEFINE,
+    OP_SET_E,
     OP_EVAL,
     OP_LAMBDA,
     OP_MACRO,
@@ -91,6 +95,9 @@ const char *operator_names[] = {
     "string-length",
     "string-append",
     "string-ref",
+    "string-set!",
+    "make-string",
+    "substring",
 
     // Display support
     "display",
@@ -120,6 +127,7 @@ const char *operator_names[] = {
     // Environment and Lambda support
     "begin",
     "define",
+    "set!",
     "eval",
     "lambda",
     "macro",

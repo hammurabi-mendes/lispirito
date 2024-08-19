@@ -95,7 +95,7 @@ LispNodeRC make_cons(const LispNodeRC &first, const LispNodeRC &second) {
 	return result;
 }
 
-const LispNodeRC &make_car(const LispNodeRC &list) {
+LispNodeRC make_car(const LispNodeRC &list) {
 	return list->get_head()->item;
 }
 
@@ -112,7 +112,7 @@ LispNodeRC make_cdr(const LispNodeRC &list) {
 	return result;
 }
 
-LispNodeRC make_query(const LispNodeRC &term, const LispNodeRC &list) {
+LispNodeRC make_query_optional_replace(const LispNodeRC &term, const LispNodeRC &list, const LispNodeRC &replacement = nullptr) {
 	for(Box *current_definition_box = list->get_head_pointer(); current_definition_box != nullptr; current_definition_box = current_definition_box->get_next_pointer()) {
 		const LispNodeRC &current_pair = current_definition_box->item;
 
@@ -120,6 +120,11 @@ LispNodeRC make_query(const LispNodeRC &term, const LispNodeRC &list) {
 		const LispNodeRC &value = current_pair->get_head()->next->item;
 
 		if(*term == *key) {
+			if(replacement.get_pointer() != nullptr) {
+				LispNodeRC &value_noconst = current_pair->get_head()->next->item;
+				value_noconst = replacement;
+			}
+
 			return value;
 		}
 	}
@@ -848,13 +853,7 @@ LispNodeRC eval_gen2(const LispNodeRC &input, LispNodeRC *environment) {
 
 			break;
     	case OP_STRING_REF:
-			if(!output1->is_string()) {
-				fputs("string-ref needs a string and a numeric integral\n", stdout);
-
-				return nullptr;
-			}
-
-			if(!output2->is_numeric_integral()) {
+			if(!output1->is_string() || !output2->is_numeric_integral()) {
 				fputs("string-ref needs a string and a numeric integral\n", stdout);
 
 				return nullptr;
@@ -865,14 +864,110 @@ LispNodeRC eval_gen2(const LispNodeRC &input, LispNodeRC *environment) {
 			result->number_i = output1->string[output2->number_i];
 
 			break;
+    	case OP_MAKE_STRING:
+			if(!output1->is_numeric() || !output2->is_character()) {
+				fputs("make-string requires a numeric integer and character arguments\n", stdout);
+
+				return nullptr;
+			}
+
+			result = new LispNode(LispType::AtomString);
+
+			result->string = static_cast<char *>(malloc(output1->number_i + 1));
+
+			for(size_t i = 0; i < output1->number_i; i++) {
+				result->string[i] = static_cast<char>(output2->number_i);
+			}
+
+			result->string[output1->number_i] = '\0';
+
+			break;
     	case OP_ASSOC:
-			result = make_query(output1, output2);
+			result = make_query_optional_replace(output1, output2);
 
 			if(result == nullptr) {
 				return atom_false;
 			}
 
 			break;
+		default:
+			fputs("PANIC: invalid type operator requested\n", stdout);
+			exit(EXIT_FAILURE);
+	}
+
+	return result;
+}
+
+LispNodeRC eval_gen3(const LispNodeRC &input, LispNodeRC *environment) {
+	const LispNodeRC &operator_name = input->get_head()->item;
+
+	int members;
+
+	if((members = count_members(input)) < 4) {
+		fputs(operator_name->string, stdout);;
+		fputs(" needs two arguments\n", stdout);
+
+		return nullptr;
+	}
+
+	const LispNodeRC &argument1 = input->get_head()->next->item;
+	const LispNodeRC &argument2 = input->get_head()->next->next->item;
+	const LispNodeRC &argument3 = input->get_head()->next->next->next->item;
+
+	LispNodeRC output1 = eval_expression(argument1, environment);
+	LispNodeRC output2 = eval_expression(argument2, environment);
+	LispNodeRC output3 = eval_expression(argument3, environment);
+				
+	if(output1 == nullptr || output2 == nullptr || output3 == nullptr) {
+		return nullptr;
+	}
+
+	int operation_index = get_operation_index(operator_name->string);
+	LispNodeRC result = nullptr;
+
+	switch(operation_index) {
+    	case OP_STRING_SET_E:
+			if(!output1->is_string() || !output2->is_numeric_integral() || !output3->is_character()) {
+				fputs("string-set! needs a string, a numeric integral and a character\n", stdout);
+
+				return nullptr;
+			}
+
+			if(output2->number_i >= strlen(output1->string)) {
+				fputs("string->set!: invalid offset\n", stdout);
+
+				return nullptr;
+			}
+
+			output1->string[output2->number_i] = static_cast<char>(output3->number_i);
+
+			return output1;
+    	case OP_SUBSTRING: {
+			if(!output1->is_string() || !output2->is_numeric_integral() || !output3->is_numeric_integral()) {
+				fputs("substring needs a string and two numeric integrals\n", stdout);
+
+				return nullptr;
+			}
+
+			if(output2->number_i < 0 || output2->number_i > strlen(output1->string) || output3->number_i < 0 || output3->number_i > strlen(output1->string)) {
+				fputs("sustring: invalid offsets\n", stdout);
+
+				return nullptr;
+			}
+
+			char saved = output1->string[output3->number_i];
+
+			// Temporarily changes the output1 string
+			output1->string[output3->number_i] = '\0';
+
+			result = new LispNode(LispType::AtomString);
+			result->string = strdup(output1->string + output2->number_i);
+
+			// Restore the original character back
+			output1->string[output3->number_i] = saved;
+
+			break;
+		}
 		default:
 			fputs("PANIC: invalid type operator requested\n", stdout);
 			exit(EXIT_FAILURE);
@@ -926,12 +1021,19 @@ LispNodeRC eval_define(const LispNodeRC &input, LispNodeRC *environment) {
 		return nullptr;
 	}
 
-	LispNodeRC new_environment = make_cons(make2(output1, output2), *environment);
+	int operation_index = get_operation_index(input->get_head()->item->string);
 
 	// Side effect: changes the current environment
-	*environment = new_environment;
+	if(operation_index == OP_DEFINE) {
+		// Just append into environment
+		*environment = make_cons(make2(output1, output2), *environment);
+	}
+	else if(operation_index == OP_SET_E) {
+		// Make query with replacement
+		make_query_optional_replace(output1, *environment, output2);
+	}
 
-	return new_environment;
+	return *environment;
 }
 
 LispNodeRC eval_eval(const LispNodeRC &input, LispNodeRC *environment) {
@@ -1183,6 +1285,9 @@ EvalFunction eval_functions[] = {
 	eval_gen1,
 	eval_gen2,
 	eval_gen2,
+	eval_gen3,
+	eval_gen2,
+	eval_gen3,
 
     // Display support
 	eval_gen1,
@@ -1212,6 +1317,7 @@ EvalFunction eval_functions[] = {
     // Environment and Lambda support
 	eval_begin,
 	eval_define,
+	eval_define,
 	eval_eval,
 	eval_lambda,
 	eval_lambda,
@@ -1227,7 +1333,7 @@ LispNodeRC eval_expression(const LispNodeRC &input, LispNodeRC *environment) {
 				return input;
 			}
 
-			LispNodeRC other_input = make_query(input, *environment);
+			LispNodeRC other_input = make_query_optional_replace(input, *environment);
 			
 			if(other_input == nullptr) {
 				fputs("atom does not resolve to function\n", stdout);
@@ -1319,9 +1425,9 @@ int main(int argc, char **argv) {
 
 	environment = list_empty;
 
- #ifndef NO_INITIAL_ENVIROMENT
+ #ifndef TARGET_6502
 	environment = get_initial_environment();
- #endif /* NO_INITIAL_ENVIROMENT */
+ #endif /* TARGET_6502 */
 
 	// Read-Eval-Print loop
 
