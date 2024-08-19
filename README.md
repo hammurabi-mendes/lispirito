@@ -18,7 +18,7 @@ A portable LISP implementation for memory-constrained systems. It works from MOS
 If you are compiling **lispirito** in a modern system, just a simple `make clean; make install` should work.
 
 To include debugging, add `-DDEBUG=1` to your build command.
-To exclude the default standard lambdas and macros, add `-DNO_INITIAL_ENVIROMENT=1` to your build command.
+To include some standard lambdas and macros, add `-DINITIAL_ENVIROMENT=1` to your build command.
 
 If you are compiling **lispirito** for MOS 6502 (in particular Ben Eater's machine), first download the LLVM-MOS SDK
 in the link below, and place it alongside this project directory. You might want to adjust the `CXX` location in your
