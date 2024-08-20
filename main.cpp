@@ -1465,5 +1465,12 @@ int main(int argc, char **argv) {
 
 	fputs("\n", stdout);
 
+	// Frees allocated data from those pointers
+	atom_true = nullptr;
+	atom_false = nullptr;
+	list_empty = nullptr;
+
+	environment = nullptr;
+
 	return EXIT_SUCCESS;
 }

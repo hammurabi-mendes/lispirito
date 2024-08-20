@@ -17,20 +17,17 @@ private:
 
 public:
     __attribute__((noinline)) RCPointer(T *pointer = nullptr): pointer(nullptr), reference_count(nullptr) {
-        if(pointer != nullptr) {
-            this->pointer = pointer;
-            this->reference_count = new CounterType(1);
-        }
+        set(pointer, pointer ? new CounterType(0) : nullptr);
     }
 
     __attribute__((noinline)) RCPointer(const RCPointer &other) {
-        set(other.pointer, other.reference_count);
+        set(other.pointer, other.pointer ? other.reference_count : nullptr);
     }
 
     __attribute__((noinline)) RCPointer &operator=(T *other_pointer) {
         if(this->pointer != other_pointer) {
             clear();
-            set(other_pointer, new CounterType(1));
+            set(other_pointer, other_pointer ? new CounterType(0) : nullptr);
         }
 
         return *this;
@@ -39,14 +36,14 @@ public:
     __attribute__((noinline)) RCPointer &operator=(const RCPointer &other) {
         if(this != &other) {
             clear();
-            set(other.pointer, other.reference_count);
+            set(other.pointer, other.pointer ? other.reference_count : nullptr);
         }
 
         return *this;
     }
 
     __attribute__((noinline)) RCPointer(RCPointer &&other) noexcept {
-        set(other.pointer, other.reference_count);
+        set(other.pointer, other.pointer ? other.reference_count : nullptr, false);
 
         other.pointer = nullptr;
         other.reference_count = nullptr;
@@ -55,7 +52,7 @@ public:
     __attribute__((noinline)) RCPointer &operator=(RCPointer &&other) noexcept {
         if(this != &other) {
             clear();
-            set(other.pointer, other.reference_count);
+            set(other.pointer, other.pointer ? other.reference_count : nullptr, false);
 
             other.pointer = nullptr;
             other.reference_count = nullptr;
@@ -76,10 +73,6 @@ public:
         return (pointer == nullptr);
     }
 
-    bool operator!=(std::nullptr_t) const {
-        return (pointer != nullptr);
-    }
-
     __attribute__((noinline)) RCPointer& operator=(std::nullptr_t) {
         clear();
         return *this;
@@ -97,11 +90,11 @@ public:
     }
 
 private:
-    __attribute__((noinline)) void set(T *pointer_new, CounterType *reference_count_new) noexcept {
+    __attribute__((noinline)) void set(T *pointer_new, CounterType *reference_count_new, bool bump = true) noexcept {
         pointer = pointer_new;
+        reference_count = reference_count_new;
 
-        if(pointer_new != nullptr) {
-            reference_count = reference_count_new;
+        if(reference_count && bump) {
             (*reference_count)++;
         }
     }
@@ -110,10 +103,10 @@ private:
         if(pointer != nullptr && --(*reference_count) == 0) {
             delete pointer;
             delete reference_count;
-
-            pointer = nullptr;
-            reference_count = nullptr;
         }
+
+        pointer = nullptr;
+        reference_count = nullptr;
     }
 };
 
