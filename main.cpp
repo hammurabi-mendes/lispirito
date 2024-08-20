@@ -107,7 +107,7 @@ LispNodeRC make_cdr(const LispNodeRC &list) {
 	}
 
 	LispNodeRC result = new LispNode(LispType::List);
-	result->get_head() = second_element_box.get_pointer();
+	result->get_head() = second_element_box;
 
 	return result;
 }
@@ -732,7 +732,7 @@ LispNodeRC eval_gen2(const LispNodeRC &input, LispNodeRC *environment) {
 	const LispNodeRC &operator_name = input->get_head()->item;
 
 	if(count_members(input) != 3) {
-		fputs(operator_name->string, stdout);;
+		fputs(operator_name->string, stdout);
 		fputs(" needs two arguments\n", stdout);
 
 		return nullptr;
@@ -901,9 +901,7 @@ LispNodeRC eval_gen2(const LispNodeRC &input, LispNodeRC *environment) {
 LispNodeRC eval_gen3(const LispNodeRC &input, LispNodeRC *environment) {
 	const LispNodeRC &operator_name = input->get_head()->item;
 
-	int members;
-
-	if((members = count_members(input)) < 4) {
+	if(count_members(input) < 4) {
 		fputs(operator_name->string, stdout);;
 		fputs(" needs two arguments\n", stdout);
 
