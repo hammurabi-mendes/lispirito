@@ -98,12 +98,12 @@ void get_real_string(Real f, char *buffer) {
 
     char buffer_internal[MAX_NUMERIC_STRING_LENGTH];
 
-    get_real_string(f.as_i(), buffer_internal);
+    get_integral_string(static_cast<Integral>(f.as_i()), buffer_internal);
     strcat(buffer, buffer_internal);
 
     strcat(buffer, ".");
 
-    get_real_string(f.as_f(), buffer_internal);
+    get_integral_string(static_cast<Integral>(f.as_f()), buffer_internal);
     strcat(buffer, buffer_internal);
 }
 #else
