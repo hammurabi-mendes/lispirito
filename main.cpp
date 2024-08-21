@@ -1098,8 +1098,10 @@ LispNodeRC eval_lambda_application(const LispNodeRC &input, LispNodeRC *environm
 	//     Eager evaluation: creates a new environment binding parameters to their eagerly-evaluated arguments
 	LispNodeRC new_environment = (*environment);
 
-	BoxRC current_parameter_box = lambda_argument1->get_head();
-	BoxRC current_argument_box = input->get_head()->next;
+	bool packed_dot = false;
+
+	Box *current_parameter_box = lambda_argument1->get_head_pointer();
+	Box *current_argument_box = input->get_head_pointer()->get_next_pointer();
 
 	while(current_parameter_box != nullptr || current_argument_box != nullptr) {
 		if(current_parameter_box == nullptr) {
@@ -1126,7 +1128,7 @@ LispNodeRC eval_lambda_application(const LispNodeRC &input, LispNodeRC *environm
 
 		if(strcmp(parameter->string, ".") == 0) {
 			// Get the name of the other parameters and bind them into a list
-			current_parameter_box = current_parameter_box->next;
+			current_parameter_box = current_parameter_box->get_next_pointer();
 			parameter = current_parameter_box->item;
 			
 			LispNodeRC list_rest = new LispNode(LispType::List);
@@ -1147,14 +1149,14 @@ LispNodeRC eval_lambda_application(const LispNodeRC &input, LispNodeRC *environm
 
 				last_box = member_box;
 				
-				current_argument_box = current_argument_box->next;
+				current_argument_box = current_argument_box->get_next_pointer();
 			}
 
 			LispNodeRC quote = make_operator("quote");
 			LispNodeRC quote_list_rest = make2(quote, list_rest);
 
-			current_argument_box = new Box(quote_list_rest);
 			argument = quote_list_rest;
+			packed_dot = true;
 		}
 
 		if(lambda_subst) {
@@ -1168,8 +1170,12 @@ LispNodeRC eval_lambda_application(const LispNodeRC &input, LispNodeRC *environm
 			new_environment = make_cons(make2(parameter, eval_argument), new_environment);
 		}
 
-		current_parameter_box = current_parameter_box->next;
-		current_argument_box = current_argument_box->next;
+		if(packed_dot) {
+			break;
+		}
+
+		current_parameter_box = current_parameter_box->get_next_pointer();
+		current_argument_box = current_argument_box->get_next_pointer();
 	}
 
 	if(lambda_subst) {
