@@ -16,7 +16,7 @@ struct Box;
 using LispNodeRC = RCPointer<LispNode>;
 using BoxRC = RCPointer<Box>;
 
-enum LispType {
+enum LispType : unsigned char {
 	AtomPure,
 	AtomBoolean,
 	AtomString,

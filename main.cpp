@@ -1414,6 +1414,11 @@ LispNodeRC get_initial_environment() {
 }
 
 int main(int argc, char **argv) {
+	// Increase the heap allocation arena
+#ifdef TARGET_6502
+	__set_heap_limit(24576);
+#endif /* TARGET_6502 */
+
 	// Setup global constants
 
 	atom_true = new LispNode(LispType::AtomBoolean);
