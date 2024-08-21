@@ -1416,7 +1416,7 @@ LispNodeRC get_initial_environment() {
 int main(int argc, char **argv) {
 	// Increase the heap allocation arena
 #ifdef TARGET_6502
-	__set_heap_limit(24576);
+	__set_heap_limit(16384);
 #endif /* TARGET_6502 */
 
 	// Setup global constants
