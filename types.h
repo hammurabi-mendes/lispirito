@@ -4,8 +4,8 @@
 #ifdef TARGET_6502
     #include <fixed_point.h>
 
-    using Integral = int;
-    using Real = FixedPoint<16, 8>;
+    using Integral = long;
+    using Real = FixedPoint<22, 10>;
 #else
     using Integral = long;
     using Real = double;

@@ -32,6 +32,8 @@ char *read_expression();
 LispNodeRC parse_expression(char *buffer);
 LispNodeRC eval_expression(const LispNodeRC &input, LispNodeRC *environment);
 
+#define ERROR(op, message) { fputs(op, stdout); fputs(": ", stdout); fputs(message, stdout); }
+
 // Utility functions
 
 int get_operation_index(const char *string) {
@@ -440,7 +442,7 @@ size_t count_members(const LispNodeRC &list) {
 
 LispNodeRC eval_quote(const LispNodeRC &input, LispNodeRC *environment) {
 	if(count_members(input) != 2) {
-		fputs("quote needs one argument\n", stdout);
+		ERROR("quote", "missing arguments\n");
 
 		return nullptr;
 	}
@@ -452,7 +454,7 @@ LispNodeRC eval_quote(const LispNodeRC &input, LispNodeRC *environment) {
 
 LispNodeRC eval_cond(const LispNodeRC &input, LispNodeRC *environment) {
 	if(count_members(input) != 2) {
-		fputs("cond needs one argument\n", stdout);
+		ERROR("cond", "missing arguments\n");
 
 		return nullptr;
 	}
@@ -461,13 +463,13 @@ LispNodeRC eval_cond(const LispNodeRC &input, LispNodeRC *environment) {
 
 	for(Box *current_box = argument1->get_head_pointer(); current_box != nullptr; current_box = current_box->get_next_pointer()) {
 		if(!current_box->item->is_list()) {
-			fputs("cond needs its second argument to be a list of pairs\n", stdout);
+			ERROR("cond", "argument type error\n");
 
 			return nullptr;
 		}
 
 		if(count_members(current_box->item) != 2) {
-			fputs("cond needs its second argument to be a list of pairs\n", stdout);
+			ERROR("cond", "argument type error\n");
 
 			return nullptr;
 		}
@@ -486,15 +488,13 @@ LispNodeRC eval_cond(const LispNodeRC &input, LispNodeRC *environment) {
 		}
 	}
 
-	fputs("cond did not find a valid test clause\n", stdout);
-
+	ERROR("cond", "no valid clause found\n");
 	return nullptr;
 }
 
 bool check_arithmethic_and_promote(char *operator_name, const LispNodeRC &first, const LispNodeRC &second) {
 	if(!first->is_numeric() || !second->is_numeric()) {
-		fputs(operator_name, stdout);
-		fputs(" requires numeric arguments\n", stdout);
+		ERROR(operator_name, "argument type error\n");
 
 		return false;
 	}
@@ -550,8 +550,7 @@ LispNodeRC eval_gen1(const LispNodeRC &input, LispNodeRC *environment) {
 	const LispNodeRC &operator_name = input->get_head()->item;
 
 	if(count_members(input) != 2) {
-		fputs(operator_name->string, stdout);;
-		fputs(" needs one argument\n", stdout);
+		ERROR(operator_name->string, "missing arguments\n");
 
 		return nullptr;
 	}
@@ -568,7 +567,7 @@ LispNodeRC eval_gen1(const LispNodeRC &input, LispNodeRC *environment) {
 
 	if(operation_index == OP_CAR || operation_index == OP_CDR) {
 		if(!output1->is_list() || output1->get_head() == nullptr) {
-			fputs("car/cdr needs a list with at least one element\n", stdout);
+			ERROR("car/cdr", "argument type error\n");
 
 			return nullptr;
 		}
@@ -597,7 +596,7 @@ LispNodeRC eval_gen1(const LispNodeRC &input, LispNodeRC *environment) {
 			return output1->is_numeric_real() ? atom_true : atom_false;
 		case OP_INTEGER_REAL:
 			if(!output1->is_numeric_integral()) {
-				fputs("integer->real requires numeric integral arguments\n", stdout);
+				ERROR("integer->real", "argument type error\n");
 
 				return nullptr;
 			}
@@ -608,7 +607,7 @@ LispNodeRC eval_gen1(const LispNodeRC &input, LispNodeRC *environment) {
 			return output1;
 		case OP_REAL_INTEGER:
 			if(!output1->is_numeric_real()) {
-				fputs("real->integer requires numeric real arguments\n", stdout);
+				ERROR("real->integer", "argument type error\n");
 
 				return nullptr;
 			}
@@ -623,7 +622,7 @@ LispNodeRC eval_gen1(const LispNodeRC &input, LispNodeRC *environment) {
 			return output1;
 		case OP_NOT:
 			if(!output1->is_boolean()) {
-				fputs("'not' requires boolean arguments\n", stdout);
+				ERROR("not", "argument type error\n");
 
 				return nullptr;
 			}
@@ -631,7 +630,7 @@ LispNodeRC eval_gen1(const LispNodeRC &input, LispNodeRC *environment) {
 			return (output1 == atom_true ? atom_false : atom_true);
 		case OP_INTEGER_CHAR:
 			if(!output1->is_numeric_integral()) {
-				fputs("integer->char requires numeric integral arguments\n", stdout);
+				ERROR("integer->char", "argument type error\n");
 
 				return nullptr;
 			}
@@ -641,7 +640,7 @@ LispNodeRC eval_gen1(const LispNodeRC &input, LispNodeRC *environment) {
 			return output1;
     	case OP_CHAR_INTEGER:
 			if(!output1->is_character()) {
-				fputs("char->integer requires character arguments\n", stdout);
+				ERROR("char->integer", "argument type error\n");
 
 				return nullptr;
 			}
@@ -651,7 +650,7 @@ LispNodeRC eval_gen1(const LispNodeRC &input, LispNodeRC *environment) {
 			return output1;
     	case OP_NUMBER_STRING:
 			if(!output1->is_numeric()) {
-				fputs("number->string requires numeric arguments\n", stdout);
+				ERROR("number->string", "argument type error\n");
 
 				return nullptr;
 			}
@@ -672,7 +671,7 @@ LispNodeRC eval_gen1(const LispNodeRC &input, LispNodeRC *environment) {
 			break;
     	case OP_STRING_NUMBER:
 			if(!output1->is_string()) {
-				fputs("string->number requires string arguments\n", stdout);
+				ERROR("string->number", "argument type error\n");
 
 				return nullptr;
 			}
@@ -680,7 +679,7 @@ LispNodeRC eval_gen1(const LispNodeRC &input, LispNodeRC *environment) {
 			result = parse_atom(output1->string);
 
 			if(result == nullptr || !result->is_numeric()) {
-				fputs("string->number could not convert string to number\n", stdout);
+				ERROR("string->number", "argument type error\n");
 
 				return nullptr;
 			}
@@ -688,7 +687,7 @@ LispNodeRC eval_gen1(const LispNodeRC &input, LispNodeRC *environment) {
 			break;
     	case OP_STRING_LENGTH:
 			if(!output1->is_string()) {
-				fputs("string-length requires string arguments\n", stdout);
+				ERROR("string-length", "argument type error\n");
 
 				return nullptr;
 			}
@@ -705,7 +704,7 @@ LispNodeRC eval_gen1(const LispNodeRC &input, LispNodeRC *environment) {
 			return list_empty;
     	case OP_NEG:
 			if(!output1->is_numeric()) {
-				fputs("neg requires numeric arguments\n", stdout);
+				ERROR("neg", "argument type error\n");
 
 				return nullptr;
 			}
@@ -732,8 +731,7 @@ LispNodeRC eval_gen2(const LispNodeRC &input, LispNodeRC *environment) {
 	const LispNodeRC &operator_name = input->get_head()->item;
 
 	if(count_members(input) != 3) {
-		fputs(operator_name->string, stdout);
-		fputs(" needs two arguments\n", stdout);
+		ERROR(operator_name->string, "missing arguments\n");
 
 		return nullptr;
 	}
@@ -838,7 +836,7 @@ LispNodeRC eval_gen2(const LispNodeRC &input, LispNodeRC *environment) {
 			}
     	case OP_STRING_APPEND:
 			if(!output1->is_string() || !output2->is_string()) {
-				fputs("string-append needs two strings\n", stdout);
+				ERROR("string-append", "argument type error\n");
 
 				return nullptr;
 			}
@@ -854,7 +852,7 @@ LispNodeRC eval_gen2(const LispNodeRC &input, LispNodeRC *environment) {
 			break;
     	case OP_STRING_REF:
 			if(!output1->is_string() || !output2->is_numeric_integral()) {
-				fputs("string-ref needs a string and a numeric integral\n", stdout);
+				ERROR("string-ref", "argument type error\n");
 
 				return nullptr;
 			}
@@ -866,7 +864,7 @@ LispNodeRC eval_gen2(const LispNodeRC &input, LispNodeRC *environment) {
 			break;
     	case OP_MAKE_STRING:
 			if(!output1->is_numeric() || !output2->is_character()) {
-				fputs("make-string requires a numeric integer and character arguments\n", stdout);
+				ERROR("make-string", "argument type error\n");
 
 				return nullptr;
 			}
@@ -902,8 +900,7 @@ LispNodeRC eval_gen3(const LispNodeRC &input, LispNodeRC *environment) {
 	const LispNodeRC &operator_name = input->get_head()->item;
 
 	if(count_members(input) < 4) {
-		fputs(operator_name->string, stdout);;
-		fputs(" needs two arguments\n", stdout);
+		ERROR(operator_name->string, "missing arguments\n");
 
 		return nullptr;
 	}
@@ -926,13 +923,13 @@ LispNodeRC eval_gen3(const LispNodeRC &input, LispNodeRC *environment) {
 	switch(operation_index) {
     	case OP_STRING_SET_E:
 			if(!output1->is_string() || !output2->is_numeric_integral() || !output3->is_character()) {
-				fputs("string-set! needs a string, a numeric integral and a character\n", stdout);
+				ERROR("string-set!", "argument type error\n");
 
 				return nullptr;
 			}
 
 			if(output2->number_i >= strlen(output1->string)) {
-				fputs("string->set!: invalid offset\n", stdout);
+				ERROR("string-set!", "invalid offset\n");
 
 				return nullptr;
 			}
@@ -942,13 +939,13 @@ LispNodeRC eval_gen3(const LispNodeRC &input, LispNodeRC *environment) {
 			return output1;
     	case OP_SUBSTRING: {
 			if(!output1->is_string() || !output2->is_numeric_integral() || !output3->is_numeric_integral()) {
-				fputs("substring needs a string and two numeric integrals\n", stdout);
+				ERROR("substring", "argument type error\n");
 
 				return nullptr;
 			}
 
 			if(output2->number_i < 0 || output2->number_i > strlen(output1->string) || output3->number_i < 0 || output3->number_i > strlen(output1->string)) {
-				fputs("sustring: invalid offsets\n", stdout);
+				ERROR("substring", "invalid offset\n");
 
 				return nullptr;
 			}
@@ -976,7 +973,7 @@ LispNodeRC eval_gen3(const LispNodeRC &input, LispNodeRC *environment) {
 
 LispNodeRC eval_begin(const LispNodeRC &input, LispNodeRC *environment) {
 	if(count_members(input) < 2) {
-		fputs("begin needs at least one argument (begin, expr1 ... exprN)\n", stdout);
+		ERROR("begin", "missing arguments\n");
 
 		return nullptr;
 	}
@@ -998,7 +995,7 @@ LispNodeRC eval_begin(const LispNodeRC &input, LispNodeRC *environment) {
 // Returns the modified environment
 LispNodeRC eval_define(const LispNodeRC &input, LispNodeRC *environment) {
 	if(count_members(input) != 3) {
-		fputs("define needs two arguments (pure atom, expression)\n", stdout);
+		ERROR("define/set!", "missing arguments\n");
 
 		return nullptr;
 	}
@@ -1014,7 +1011,7 @@ LispNodeRC eval_define(const LispNodeRC &input, LispNodeRC *environment) {
 	}
 
 	if(!output1->is_atom() || !output1->is_pure()) {
-		fputs("define needs two arguments (pure atom, expression)\n", stdout);
+		ERROR("define/set!", "argument type error\n");
 
 		return nullptr;
 	}
@@ -1036,7 +1033,7 @@ LispNodeRC eval_define(const LispNodeRC &input, LispNodeRC *environment) {
 
 LispNodeRC eval_eval(const LispNodeRC &input, LispNodeRC *environment) {
 	if(count_members(input) != 3) {
-		fputs("eval needs two arguments (expression, environment)\n", stdout);
+		ERROR("eval", "missing arguments\n");
 
 		return nullptr;
 	}
@@ -1051,7 +1048,7 @@ LispNodeRC eval_eval(const LispNodeRC &input, LispNodeRC *environment) {
 
 LispNodeRC eval_lambda(const LispNodeRC &input, LispNodeRC *environment) {
 	if(count_members(input) != 3) {
-		fputs("lambda needs two arguments ((p1 ... pN) expression), where p1 ... pN are atoms\n", stdout);
+		ERROR("lambda", "missing arguments\n");
 
 		return nullptr;
 	}
@@ -1059,14 +1056,14 @@ LispNodeRC eval_lambda(const LispNodeRC &input, LispNodeRC *environment) {
 	const LispNodeRC &argument1 = input->get_head()->next->item;
 
 	if(!argument1->is_list()) {
-		fputs("lambda needs two arguments ((p1 ... pN) expression), where p1 ... pN are pure atoms\n", stdout);
+		ERROR("lambda", "argument type error\n");
 
 		return nullptr;
 	}
 
 	for(Box *current_parameter_box = argument1->get_head_pointer(); current_parameter_box != nullptr; current_parameter_box = current_parameter_box->get_next_pointer()) {
 		if(!current_parameter_box->item->is_atom() || !current_parameter_box->item->is_pure()) {
-			fputs("lambda needs two arguments ((p1 ... pN) expression), where p1 ... pN are pure atoms\n", stdout);
+			ERROR("lambda", "argument type error\n");
 
 			return nullptr;
 		}
@@ -1105,13 +1102,13 @@ LispNodeRC eval_lambda_application(const LispNodeRC &input, LispNodeRC *environm
 
 	while(current_parameter_box != nullptr || current_argument_box != nullptr) {
 		if(current_parameter_box == nullptr) {
-			fputs("lambda application has extra arguments\n", stdout);
+			ERROR("lambd applicationa", "missing or extra arguments\n");
 
 			return nullptr;
 		}
 
 		if(current_argument_box == nullptr) {
-			fputs("lambda application has missing arguments\n", stdout);
+			ERROR("lambd applicationa", "missing or extra arguments\n");
 
 			return nullptr;
 		}
@@ -1121,7 +1118,7 @@ LispNodeRC eval_lambda_application(const LispNodeRC &input, LispNodeRC *environm
 		LispNodeRC argument = current_argument_box->item;
 
 		if(!parameter->is_atom() || !parameter->is_pure()) {
-			fputs("lambda application needs two arguments (pure atom, expression)\n", stdout);
+			ERROR("lambda application", "argument type error\n");
 
 			return nullptr;
 		}
@@ -1190,7 +1187,7 @@ LispNodeRC eval_logic2(const LispNodeRC &input, LispNodeRC *environment) {
 	const LispNodeRC &operator_name = input->get_head()->item;
 
 	if(count_members(input) != 3) {
-		fputs("and/or need two arguments\n", stdout);
+		ERROR("and/or", "missing arguments\n");
 
 		return nullptr;
 	}
@@ -1205,7 +1202,7 @@ LispNodeRC eval_logic2(const LispNodeRC &input, LispNodeRC *environment) {
 	}
 
 	if(!output1->is_boolean()) {
-		fputs("and/or requires boolean arguments\n", stdout);
+		ERROR("and/or", "argument type error\n");
 
 		return nullptr;
 	}
@@ -1227,7 +1224,7 @@ LispNodeRC eval_logic2(const LispNodeRC &input, LispNodeRC *environment) {
 	}
 
 	if(!output2->is_boolean()) {
-		fputs("and/or requires boolean arguments\n", stdout);
+		ERROR("and/or", "argument type error\n");
 
 		return nullptr;
 	}
@@ -1237,7 +1234,7 @@ LispNodeRC eval_logic2(const LispNodeRC &input, LispNodeRC *environment) {
 
 LispNodeRC eval_subst(const LispNodeRC &input, LispNodeRC *environment) {
 	if(count_members(input) != 4) {
-		fputs("subst needs three arguments: old, new, expression\n", stdout);
+		ERROR("subst", "missing arguments\n");
 
 		return nullptr;
 	}
@@ -1340,7 +1337,7 @@ LispNodeRC eval_expression(const LispNodeRC &input, LispNodeRC *environment) {
 			LispNodeRC other_input = make_query_optional_replace(input, *environment);
 			
 			if(other_input == nullptr) {
-				fputs("atom does not resolve to function\n", stdout);
+				ERROR(input->string, "does not resolve to function\n");
 
 				return nullptr;
 			}
@@ -1354,7 +1351,7 @@ LispNodeRC eval_expression(const LispNodeRC &input, LispNodeRC *environment) {
 	// Here you are certain that input->is_list()
 
 	if(input->get_head() == nullptr) {
-		fputs("Empty list cannot be evaluated\n", stdout);
+		ERROR("\'()", "cannot evaluate\n");
 
 		return nullptr;
 	}
@@ -1384,8 +1381,6 @@ LispNodeRC eval_expression(const LispNodeRC &input, LispNodeRC *environment) {
 	}
 
 	if(!first->is_list()) {
-		fputs("operator not recognized\n", stdout);
-
 		return nullptr;
 	}
 
@@ -1441,6 +1436,11 @@ int main(int argc, char **argv) {
 	// Read-Eval-Print loop
 
 	while(true) {
+#ifdef TARGET_6502
+		fputs("free: ", stdout);
+		print_integral(__heap_bytes_free());
+		fputs("\n", stdout);
+#endif /* TARGET_6502 */
 		fputs("> ", stdout);
 
 		char *input_string = read_expression();
