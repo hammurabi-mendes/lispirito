@@ -1102,13 +1102,13 @@ LispNodeRC eval_lambda_application(const LispNodeRC &input, LispNodeRC *environm
 
 	while(current_parameter_box != nullptr || current_argument_box != nullptr) {
 		if(current_parameter_box == nullptr) {
-			ERROR("lambd applicationa", "missing or extra arguments\n");
+			ERROR("lambda application", "missing or extra arguments\n");
 
 			return nullptr;
 		}
 
 		if(current_argument_box == nullptr) {
-			ERROR("lambd applicationa", "missing or extra arguments\n");
+			ERROR("lambda application", "missing or extra arguments\n");
 
 			return nullptr;
 		}
@@ -1409,11 +1409,6 @@ LispNodeRC get_initial_environment() {
 }
 
 int main(int argc, char **argv) {
-	// Increase the heap allocation arena
-#ifdef TARGET_6502
-	__set_heap_limit(16384);
-#endif /* TARGET_6502 */
-
 	// Setup global constants
 
 	atom_true = new LispNode(LispType::AtomBoolean);

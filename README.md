@@ -18,7 +18,11 @@ A portable LISP implementation for memory-constrained systems. It works from MOS
 If you are compiling **lispirito** in a modern system, just a simple `make clean; make install` should work.
 
 To include debugging, add `-DDEBUG=1` to your build command.
-To include some standard lambdas and macros, add `-DINITIAL_ENVIROMENT=1` to your build command.
+To include some standard lambdas and macros, add `-DINITIAL_ENVIROMENT=1` to your build command. Make sure you have heap memory for this! If you are on 6502 systems,
+you likely/unfortunately do not. In that case, you can either:
+
+- Type the definitions you want in the REPL, maximally saving space; or
+- Edit the `lambdas.h` and `macros.h` files to include only the definitions you need.
 
 If you are compiling **lispirito** for MOS 6502 (in particular Ben Eater's machine), first download the LLVM-MOS SDK
 in the link below, and place it alongside this project directory. You might want to adjust the `CXX` location in your
