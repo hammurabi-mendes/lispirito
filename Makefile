@@ -15,7 +15,7 @@ endif
 
 ifeq ($(TARGET_6502), 1)
 STANDARD=-std=c++20
-OPTIMIZATION=-Os
+OPTIMIZATION=-Oz
 SANITIZE=
 else
 STANDARD=-std=c++20

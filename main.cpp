@@ -789,7 +789,6 @@ LispNodeRC eval_gen2(const LispNodeRC &input, LispNodeRC *environment) {
 				return (output1->number_r < output2->number_r) ? atom_true : atom_false;
 			}
 		case OP_BIGGER:
-
 			if(output1->type == LispType::AtomNumericIntegral) {
 				return (output1->number_i > output2->number_i) ? atom_true : atom_false;
 			}
