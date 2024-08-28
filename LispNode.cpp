@@ -9,7 +9,7 @@ LispNode::LispNode(LispType type): type{type} {
 }
 
 LispNode::~LispNode() {
-	if(type == LispType::AtomPure || type == LispType::AtomString) {
+	if(type == LispType::AtomPure || type == LispType::AtomBoolean || type == LispType::AtomString) {
 		free(string);
 	}
 

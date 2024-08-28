@@ -1077,11 +1077,12 @@ LispNodeRC eval_lambda_application(const LispNodeRC &input, LispNodeRC *environm
 
 	LispNodeRC output = eval_lambda(lambda, environment);
 
-	bool lambda_subst = (get_operation_index(lambda->get_head()->item->string) == OP_MACRO);
-
 	if(output == nullptr) {
 		return nullptr;
 	}
+
+	// Defines if we operate on macro substitution mode or in eager evaluation mode
+	bool lambda_subst = (get_operation_index(lambda->get_head()->item->string) == OP_MACRO);
 
 	const LispNodeRC &lambda_argument1 = lambda->get_head()->next->item;
 	const LispNodeRC &lambda_argument2 = lambda->get_head()->next->next->item;
@@ -1094,6 +1095,16 @@ LispNodeRC eval_lambda_application(const LispNodeRC &input, LispNodeRC *environm
 	// Used when lambda_subst == #f:
 	//     Eager evaluation: creates a new environment binding parameters to their eagerly-evaluated arguments
 	LispNodeRC new_environment = (*environment);
+
+	// Check if the function has first become active in the current invocation stack.
+	// - If true, create an activation record and create bindings for each (parameter, argument)
+	// - If false, former bindings are reused in order to support recursive evaluation in O(1) heap space per function
+	bool first_activation = (make_query_optional_replace(lambda, new_environment) == nullptr);
+
+	// If not previously active, create an activation record for the function
+	if(first_activation) {
+		new_environment = make_cons(make2(lambda, atom_true), new_environment);
+	}
 
 	bool packed_dot = false;
 
@@ -1163,8 +1174,14 @@ LispNodeRC eval_lambda_application(const LispNodeRC &input, LispNodeRC *environm
 			// Resolve the argument in the old environment
 			LispNodeRC eval_argument = eval_expression(argument, environment);
 
-			// Bind it to the parameter in the new environment
-			new_environment = make_cons(make2(parameter, eval_argument), new_environment);
+			// If it is the first activation, create bindings for each (parameter, argument)
+			if(first_activation) {
+				new_environment = make_cons(make2(parameter, eval_argument), new_environment);
+			}
+			// If it is not the first activation, reuse former bindings
+			else {
+				make_query_optional_replace(parameter, new_environment, eval_argument);
+			}
 		}
 
 		if(packed_dot) {
