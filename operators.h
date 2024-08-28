@@ -36,8 +36,6 @@ enum LispOperation {
     OP_DISPLAY,
     OP_NEWLINE,
 
-    OP_NEG,
-
     OP_PLUS,
     OP_MINUS,
     OP_TIMES,
@@ -102,9 +100,6 @@ const char *operator_names[] = {
     // Display support
     "display",
     "newline",
-
-    // Arithmetic
-    "neg",
 
     // Arithmetic
     "+",

@@ -702,23 +702,6 @@ LispNodeRC eval_gen1(const LispNodeRC &input, LispNodeRC *environment) {
 			output1->print();
 
 			return list_empty;
-    	case OP_NEG:
-			if(!output1->is_numeric()) {
-				ERROR("neg", "argument type error\n");
-
-				return nullptr;
-			}
-
-			result = new LispNode(output1->type);
-
-			if(output1->is_numeric_integral()) {
-				result->number_i = -output1->number_i;
-			}
-			else {
-				result->number_r = -output1->number_r;
-			}
-
-			break;
 		default:
 			fputs("PANIC: invalid type operator requested\n", stdout);
 			exit(EXIT_FAILURE);
@@ -857,6 +840,12 @@ LispNodeRC eval_gen2(const LispNodeRC &input, LispNodeRC *environment) {
 				return nullptr;
 			}
 
+			if(output2->number_i < 0 || output2->number_i >= strlen(output1->string)) {
+				ERROR("string-ref", "invalid offset\n");
+
+				return nullptr;
+			}
+
 			result = new LispNode(LispType::AtomCharacter);
 
 			result->number_i = output1->string[output2->number_i];
@@ -928,7 +917,7 @@ LispNodeRC eval_gen3(const LispNodeRC &input, LispNodeRC *environment) {
 				return nullptr;
 			}
 
-			if(output2->number_i >= strlen(output1->string)) {
+			if(output2->number_i < 0 || output2->number_i >= strlen(output1->string)) {
 				ERROR("string-set!", "invalid offset\n");
 
 				return nullptr;
@@ -1310,9 +1299,6 @@ EvalFunction eval_functions[] = {
     // Display support
 	eval_gen1,
 	eval_gen0,
-
-    // Arithmetic
-	eval_gen1,
 
     // Arithmetic
 	eval_gen2,
