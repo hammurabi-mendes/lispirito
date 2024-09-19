@@ -5,9 +5,9 @@ class SimpleAllocator {
 	constexpr static int BITMAP_BYTES = 7;
 	constexpr static int DATA_BYTES = 120;
 
-#define BITMAP_GET(bitmap, offset) (bitmap[offset / BITMAP_BYTES] & (1 << (offset % 8)))
-#define BITMAP_SET_ON(bitmap, offset) (bitmap[offset / BITMAP_BYTES] |= (1 << (offset % 8)))
-#define BITMAP_SET_OFF(bitmap, offset) (bitmap[offset / BITMAP_BYTES] &= ~(1 << (offset % 8)))
+#define BITMAP_GET(bitmap, offset) (bitmap[offset / 8] & (1 << (offset % 8)))
+#define BITMAP_SET_ON(bitmap, offset) (bitmap[offset / 8] |= (1 << (offset % 8)))
+#define BITMAP_SET_OFF(bitmap, offset) (bitmap[offset / 8] &= ~(1 << (offset % 8)))
 
 #define DATA_GET(data, size, i) (reinterpret_cast<char *>(data) + (i * size))
 

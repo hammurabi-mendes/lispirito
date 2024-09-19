@@ -88,6 +88,10 @@ Real atof(char *input) {
         }
     }
 
+    if(strlen(fraction) > DECIMAL_RESOLUTION) {
+        fraction[DECIMAL_RESOLUTION] = '\0';
+    }
+
     Real result(atol(integral), atol(fraction));
 
     return result;

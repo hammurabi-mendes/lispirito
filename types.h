@@ -6,6 +6,9 @@
 
     using Integral = long;
     using Real = FixedPoint<22, 10>;
+
+    // Make this be floor(log_{10}(2^x)) where x is the number of decimal points
+    constexpr int DECIMAL_RESOLUTION = 3;
 #else
     using Integral = long;
     using Real = double;
