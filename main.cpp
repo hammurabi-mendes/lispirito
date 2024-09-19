@@ -34,6 +34,22 @@ LispNodeRC eval_expression(const LispNodeRC &input, LispNodeRC *environment);
 
 #define ERROR(op, message) { fputs(op, stdout); fputs(": ", stdout); fputs(message, stdout); }
 
+#ifdef TARGET_6502
+#include "SimpleAllocator.h"
+
+SimpleAllocator allocator;
+
+void *operator new(size_t size) {
+    void *pointer = allocator.malloc(size);
+
+    return pointer;
+}
+
+void operator delete(void *pointer) noexcept {
+    allocator.free(pointer);
+}
+#endif /* TARGET_6502 */
+
 // Utility functions
 
 int get_operation_index(const char *string) {
@@ -1084,16 +1100,6 @@ LispNodeRC eval_lambda_application(const LispNodeRC &input, LispNodeRC *environm
 	//     Eager evaluation: creates a new environment binding parameters to their eagerly-evaluated arguments
 	LispNodeRC new_environment = (*environment);
 
-	// Check if the function has first become active in the current invocation stack.
-	// - If true, create an activation record and create bindings for each (parameter, argument)
-	// - If false, former bindings are reused in order to support recursive evaluation in O(1) heap space per function
-	bool first_activation = (make_query_optional_replace(lambda, new_environment) == nullptr);
-
-	// If not previously active, create an activation record for the function
-	if(first_activation) {
-		new_environment = make_cons(make2(lambda, atom_true), new_environment);
-	}
-
 	bool packed_dot = false;
 
 	Box *current_parameter_box = lambda_argument1->get_head_pointer();
@@ -1162,14 +1168,7 @@ LispNodeRC eval_lambda_application(const LispNodeRC &input, LispNodeRC *environm
 			// Resolve the argument in the old environment
 			LispNodeRC eval_argument = eval_expression(argument, environment);
 
-			// If it is the first activation, create bindings for each (parameter, argument)
-			if(first_activation) {
-				new_environment = make_cons(make2(parameter, eval_argument), new_environment);
-			}
-			// If it is not the first activation, reuse former bindings
-			else {
-				make_query_optional_replace(parameter, new_environment, eval_argument);
-			}
+			new_environment = make_cons(make2(parameter, eval_argument), new_environment);
 		}
 
 		if(packed_dot) {
@@ -1411,6 +1410,14 @@ LispNodeRC get_initial_environment() {
 }
 
 int main(int argc, char **argv) {
+#ifdef TARGET_6502
+#define COMMON_AREA_SIZE 3072
+
+	void *common_area_base = malloc(COMMON_AREA_SIZE);
+
+	allocator.init(common_area_base, reinterpret_cast<char *>(common_area_base) + COMMON_AREA_SIZE);
+#endif /* TARGET_6502 */
+
 	// Setup global constants
 
 	atom_true = new LispNode(LispType::AtomBoolean);
@@ -1435,7 +1442,7 @@ int main(int argc, char **argv) {
 	while(true) {
 #ifdef TARGET_6502
 		fputs("free: ", stdout);
-		print_integral(__heap_bytes_free());
+		print_integral(allocator.available() + __heap_bytes_free());
 		fputs("\n", stdout);
 #endif /* TARGET_6502 */
 		fputs("> ", stdout);
@@ -1477,6 +1484,10 @@ int main(int argc, char **argv) {
 	list_empty = nullptr;
 
 	environment = nullptr;
+
+#ifdef TARGET_6502
+	free(common_area_base);
+#endif /* TARGET_6502 */
 
 	return EXIT_SUCCESS;
 }

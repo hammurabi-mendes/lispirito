@@ -33,10 +33,15 @@ else
 endif
 
 PROGRAMS=lispirito
+DEPENDENCIES=main.o LispNode.o extra.o
+
+ifeq ($(TARGET_6502), 1)
+DEPENDENCIES+=SimpleAllocator.o
+endif
 
 all: $(PROGRAMS)
 
-lispirito: main.o LispNode.o extra.o
+lispirito: $(DEPENDENCIES)
 	$(CXX) $(CPPFLAGS) -o $@ $^ $(LDFLAGS)
 
 %.o: %.cpp

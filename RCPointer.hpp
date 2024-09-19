@@ -4,7 +4,7 @@
 #include <cstddef>
 
 #ifdef TARGET_6502
-using CounterType = unsigned int;
+using CounterType = unsigned char;
 #else
 using CounterType = unsigned long;
 #endif /* TARGET_6502 */
@@ -12,7 +12,7 @@ using CounterType = unsigned long;
 template<typename T>
 class RCPointer {
 private:
-    T* pointer;
+    T *pointer;
     CounterType *reference_count;
 
 public:
