@@ -30,14 +30,14 @@ void *SimpleAllocator::malloc(int size) {
 		}
 
 		// If we find an appropriately-sized, non-free chunk with an empty slot, use the slot
-		for(int i = 0; i < (DATA_BYTES / chunk->size); i++) {
+		for(int i = 0; i < (chunk->data_bytes() / chunk->size); i++) {
 			if(BITMAP_GET(chunk->bitmap, i) == 0) {
 				BITMAP_SET_ON(chunk->bitmap, i);
 
 				// Adjust bytes_available for the allocation
 				bytes_available -= chunk->size;
 
-				return DATA_GET(chunk->data, chunk->size, i);
+				return DATA_GET(chunk->data(), chunk->size, i);
 			}
 		}
 	}
@@ -47,16 +47,16 @@ void *SimpleAllocator::malloc(int size) {
 		free_chunk->size = size;
 
 		// Adjust bytes_available for internal fragmentation loss and the actual allocation
-		bytes_available -= (DATA_BYTES % free_chunk->size);
+		bytes_available -= (free_chunk->data_bytes() % free_chunk->size);
 		bytes_available -= free_chunk->size;
 
-		for(int i = 0; i < BITMAP_BYTES; i++) {
+		for(int i = 0; i < free_chunk->bitmap_bytes(); i++) {
 			free_chunk->bitmap[i] = 0;
 		}
 
 		BITMAP_SET_ON(free_chunk->bitmap, 0);
 
-		return DATA_GET(free_chunk->data, free_chunk->size, 0);
+		return DATA_GET(free_chunk->data(), free_chunk->size, 0);
 	}
 
 	return nullptr;
@@ -67,7 +67,7 @@ void SimpleAllocator::free(void *pointer) {
 
 	Chunk *chunk = reinterpret_cast<Chunk *>(reinterpret_cast<Chunk *>(base) + chunk_number);
 	
-	unsigned int chunk_position = (reinterpret_cast<char *>(pointer) - chunk->data) / chunk->size;
+	unsigned int chunk_position = (reinterpret_cast<char *>(pointer) - chunk->data()) / chunk->size;
 
 	bytes_available += chunk->size;
 	BITMAP_SET_OFF(chunk->bitmap, chunk_position);
