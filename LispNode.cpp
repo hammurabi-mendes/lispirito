@@ -96,7 +96,7 @@ void LispNode::print() {
 		case List:
 			fputs("(", stdout);
 			
-			for(BoxRC current = get_head(); current != nullptr; current = current->next) {
+			for(Box *current = get_head_pointer(); current != nullptr; current = current->get_next_pointer()) {
 				current->item->print();
 
 				if(current->next != nullptr) {
