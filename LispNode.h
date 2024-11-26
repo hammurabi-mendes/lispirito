@@ -33,19 +33,15 @@ struct LispNode {
 		char *string;
 		Integral number_i;
 		Real number_r;
-		BoxRC *head;
+		BoxRC head;
 	};
 
 public:
 	LispNode(LispType type);
 	~LispNode();
 
-	BoxRC &get_head() const {
-		return *head;
-	}
-
 	Box *get_head_pointer() const {
-		return head->get_pointer();
+		return head.get_pointer();
 	}
 
 	bool operator==(const LispNode &other) const;

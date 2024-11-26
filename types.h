@@ -14,4 +14,6 @@
     using Real = double;
 #endif /* TARGET_6502 */
 
+using CounterType = unsigned int;
+
 #endif /* TYPES_H */

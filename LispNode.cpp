@@ -2,10 +2,7 @@
 
 #include "extra.h"
 
-LispNode::LispNode(LispType type): type{type} {
-	if(type == LispType::List) {
-		head = new BoxRC(nullptr);
-	}
+LispNode::LispNode(LispType type): type{type}, head{nullptr} {
 }
 
 LispNode::~LispNode() {
@@ -14,7 +11,7 @@ LispNode::~LispNode() {
 	}
 
 	if(type == LispType::List) {
-		delete head;
+		head = nullptr;
 	}
 }
 

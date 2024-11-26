@@ -66,7 +66,7 @@ void print_real(Real f) {
 char *strdup(const char *input) {
     int input_length = strlen(input);
 
-    char *result = (char *) malloc(input_length + 1);
+    char *result = (char *) Allocate(input_length + 1);
 
     for(int i = 0; i < input_length; i++) {
         result[i] = input[i];
