@@ -1283,77 +1283,6 @@ LispNodeRC eval_subst(LispNodeRC input, LispNodeRC environment) {
 	return make_substitution(output1, output2, argument3);
 }
 
-using EvalFunction = LispNodeRC (*)(LispNodeRC, LispNodeRC);
-
-EvalFunction eval_functions[] = {
-    // McCarthy
-	eval_quote,
-	eval_gen1,
-	eval_gen1,
-	eval_gen1,
-	eval_gen2,
-	eval_gen2,
-	eval_cond,
-
-	// Asociation and substitution
-	eval_gen2,
-	eval_subst,
-
-    // Type support
-	eval_gen1,
-	eval_gen1,
-	eval_gen1,
-	eval_gen1,
-	eval_gen1,
-	eval_gen1,
-	eval_gen1,
-	eval_gen1,
-	eval_gen1,
-	eval_gen1,
-	eval_gen1,
-	eval_gen1,
-	eval_gen1,
-	eval_gen1,
-	eval_gen2,
-	eval_gen2,
-	eval_gen3,
-	eval_gen2,
-	eval_gen3,
-
-    // Display support
-	eval_gen1,
-	eval_gen0,
-
-    // Arithmetic
-	eval_gen2,
-	eval_gen2,
-	eval_gen2,
-	eval_gen2,
-
-    // Arithmetic comparison
-	eval_gen2,
-	eval_gen2,
-	eval_gen2,
-	eval_gen2,
-	eval_gen2,
-
-    // Logic
-	eval_logic2,
-	eval_logic2,
-	eval_gen1,
-
-    // Environment and Lambda support
-	eval_begin,
-	eval_define,
-	eval_define,
-	eval_eval,
-	eval_lambda,
-	eval_lambda,
-	eval_gen0,
-	eval_gen1,
-	eval_gen0
-};
-
 LispNodeRC eval_expression(LispNodeRC input, LispNodeRC environment) {
 	if(input->is_atom()) {
 		if(input->is_pure()) {
@@ -1382,15 +1311,88 @@ LispNodeRC eval_expression(LispNodeRC input, LispNodeRC environment) {
 
 		return nullptr;
 	}
-	
+
 	const LispNodeRC &first = input->head->item;
 
 	if(first->is_atom() && first->is_pure()) {
 		// First try one of the predefined operators
 		int operation_index = get_operation_index(first->string);
 
-		if(operation_index != -1) {
-			return eval_functions[operation_index](input, environment);
+		switch(operation_index) {
+			case OP_QUOTE:
+				return eval_quote(input, environment);
+
+			case OP_COND:
+				return eval_cond(input, environment);
+
+			case OP_SUBST:
+				return eval_subst(input, environment);
+
+			case OP_READ:
+			case OP_NEWLINE:
+			case OP_CURRENT_ENVIRONMENT:
+				return eval_gen0(input, environment);
+			
+			case OP_CAR:
+			case OP_CDR:
+			case OP_ATOM_Q:
+			case OP_PAIR_Q:
+			case OP_CHAR_Q:
+			case OP_BOOLEAN_Q:
+			case OP_STRING_Q:
+			case OP_NUMBER_Q:
+			case OP_INTEGER_Q:
+			case OP_REAL_Q:
+			case OP_INTEGER_REAL:
+			case OP_REAL_INTEGER:
+			case OP_INTEGER_CHAR:
+			case OP_CHAR_INTEGER:
+			case OP_NUMBER_STRING:
+			case OP_STRING_NUMBER:
+			case OP_STRING_LENGTH:
+			case OP_NOT:
+			case OP_WRITE:
+			case OP_DISPLAY:
+				return eval_gen1(input, environment);
+			
+			case OP_EQ_Q:
+			case OP_CONS:
+			case OP_ASSOC:
+			case OP_STRING_APPEND:
+			case OP_STRING_REF:
+			case OP_MAKE_STRING:
+			case OP_PLUS:
+			case OP_MINUS:
+			case OP_TIMES:
+			case OP_DIVIDE:
+			case OP_LESS:
+			case OP_EQUAL:
+			case OP_BIGGER:
+			case OP_LESS_EQUAL:
+			case OP_BIGGER_EQUAL:
+				return eval_gen2(input, environment);
+
+			case OP_STRING_SET_E:
+			case OP_SUBSTRING:
+				return eval_gen3(input, environment);
+
+			case OP_AND:
+			case OP_OR:
+				return eval_logic2(input, environment);
+
+			case OP_BEGIN:
+				return eval_begin(input, environment);
+
+			case OP_DEFINE:
+			case OP_SET_E:
+				return eval_define(input, environment);
+
+			case OP_EVAL:
+				return eval_eval(input, environment);
+
+			case OP_LAMBDA:
+			case OP_MACRO:
+				return eval_lambda(input, environment);
 		}
 
 		// Evaluate the atom and try again
