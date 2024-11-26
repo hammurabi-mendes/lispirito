@@ -14,6 +14,3 @@
 (define apply (lambda (op . list) (foldl op (car list) (cdr list))))
 (define if (macro (test if_clause else_clause)    (cond ((test if_clause) (#t else_clause)))))
 (define let (macro (bindings expression)   (begin       (define new_env (foldr cons (current-environment) (quote bindings)))       (eval expression new_env)   )))
-
-(apply + 1 2 3 4 5)
-(apply + 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16)
