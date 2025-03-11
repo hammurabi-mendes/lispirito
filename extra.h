@@ -12,13 +12,13 @@ void print_integral(Integral n);
 void print_real(Real f);
 
 #ifdef TARGET_6502
-    #ifdef SIMPLE_ALLOCATOR
+	#ifdef SIMPLE_ALLOCATOR
 		#include "SimpleAllocator.h"
 
 		extern SimpleAllocator allocator;
 
-        #define Allocate allocator.malloc
-        #define Deallocate allocator.free
+		#define Allocate allocator.allocate
+		#define Deallocate allocator.deallocate
 	#else
 		#define Allocate malloc
 		#define Deallocate free

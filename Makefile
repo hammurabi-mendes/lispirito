@@ -37,6 +37,7 @@ DEPENDENCIES=main.o LispNode.o extra.o
 
 ifeq ($(SIMPLE_ALLOCATOR), 1)
 DEPENDENCIES+=SimpleAllocator.o
+CFLAGS += -DSIMPLE_ALLOCATOR
 endif
 
 all: $(PROGRAMS)

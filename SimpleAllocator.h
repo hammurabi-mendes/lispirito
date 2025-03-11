@@ -1,59 +1,54 @@
 #ifndef SIMPLE_ALLOCATOR_H
 #define SIMPLE_ALLOCATOR_H
 
-class SimpleAllocator {
-	constexpr static int DATA_BYTES = 127;
+#include "types.h"
+#include "LispNode.h"
 
 #define BITMAP_GET(bitmap, offset) (bitmap[offset / 8] & (1 << (offset % 8)))
 #define BITMAP_SET_ON(bitmap, offset) (bitmap[offset / 8] |= (1 << (offset % 8)))
 #define BITMAP_SET_OFF(bitmap, offset) (bitmap[offset / 8] &= ~(1 << (offset % 8)))
 
-#define DATA_GET(data, size, i) (static_cast<char *>(data) + (i * size))
+class SimpleAllocator {
+	static constexpr uint16_t NUMBER_STANDARD_ALLOCATIONS = 2;
 
+	static constexpr uint16_t STANDARD_ALLOCATIONS[NUMBER_STANDARD_ALLOCATIONS] = {
+		(sizeof(LispNode) + sizeof(CounterType)),
+		(sizeof(Box) + sizeof(CounterType))
+	};
+
+	static constexpr uint16_t CHUNK_SIZE = 64; // Make it multiple of 8
+
+	// Allocator chunk for LispNode
 	struct Chunk {
-		unsigned int size : 6;
-		unsigned int reserved: 2;
-		char bitmap[DATA_BYTES];
+		uint8_t allocation_index : 1;
+		uint8_t number_available: 7;
 
-		unsigned int bitmap_bytes() {
-			if(size >= 16) {
-				return 1;
-			}
-			if(size >= 8) {
-				return 2;
-			}
-			if(size >= 4) {
-				return 4;
-			}
-			if(size >= 2) {
-				return 8;
-			}
-			return 16;
-		}
+		char bitmap[CHUNK_SIZE / 8];
+		char *data;
+		char *limit;
 
-		unsigned int data_bytes() {
-			return DATA_BYTES - bitmap_bytes();
-		}
+		Chunk *next;
 
-		char *data() {
-			return bitmap + bitmap_bytes();
+		Chunk(uint8_t allocation_index, char *data, Chunk *next): allocation_index{allocation_index}, data{data}, next{next} {
+			limit = data + (CHUNK_SIZE * STANDARD_ALLOCATIONS[allocation_index]);
+			number_available = CHUNK_SIZE;
+
+			for(auto i = 0; i < CHUNK_SIZE / 8; i++) {
+				bitmap[i] = 0;
+			}
 		}
 	};
 
-	void *base;
-	void *limit;
+	Chunk *head;
 
-	unsigned int bytes_available;
+	uint16_t number_available[NUMBER_STANDARD_ALLOCATIONS];
 
 public:
-	SimpleAllocator(): base{nullptr}, limit{nullptr}, bytes_available{0} {}
+	SimpleAllocator();
+	~SimpleAllocator();
 
-	void init(void *base, void *limit);
-
-	void *malloc(int size);
-	void free(void *pointer);
-
-	int available() { return bytes_available; }
+	void *allocate(int size);
+	void deallocate(void *pointer);
 };
 
 #endif /* SIMPLE_ALLOCATOR_H */

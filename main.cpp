@@ -35,22 +35,17 @@ char *read_expression();
 LispNodeRC parse_expression(char *buffer);
 LispNodeRC eval_expression(LispNodeRC input, LispNodeRC environment);
 
-#ifdef TARGET_6502
-	#ifdef SIMPLE_ALLOCATOR
-		#include "SimpleAllocator.h"
+#ifdef SIMPLE_ALLOCATOR
+	#include "SimpleAllocator.h"
 
-		SimpleAllocator allocator;
+	SimpleAllocator allocator;
 
-        #define Allocate allocator.malloc
-        #define Deallocate allocator.free
-	#else
-		#define Allocate malloc
-		#define Deallocate free
-	#endif /* SIMPLE_ALLOCATOR */
+	#define Allocate allocator.allocate
+	#define Deallocate allocator.deallocate
 #else
 	#define Allocate malloc
 	#define Deallocate free
-#endif /* TARGET_6502 */
+#endif /* SIMPLE_ALLOCATOR */
 
 void *operator new(size_t size) {
 	CounterType *pointer = (CounterType *) Allocate(size + sizeof(CounterType));
@@ -61,7 +56,7 @@ void *operator new(size_t size) {
 }
 
 void operator delete(void *pointer) noexcept {
-	Deallocate(((char *) pointer) - sizeof(CounterType));
+	Deallocate(((CounterType *) pointer) - 1);
 }
 
 // Utility functions
@@ -530,30 +525,6 @@ LispNodeRC eval_cond(LispNodeRC input, LispNodeRC environment) {
 	return nullptr;
 }
 
-bool check_arithmethic_and_promote(char *operator_name, const LispNodeRC &first, const LispNodeRC &second) {
-	if(!first->is_numeric() || !second->is_numeric()) {
-		print_error(operator_name, "argument type error\n");
-
-		return false;
-	}
-
-	if(first->is_numeric_real() && !second->is_numeric_real()) {
-		Integral integral = second->number_i;
-
-		second->type = LispType::AtomNumericReal;
-		second->number_r = integral;
-	}
-
-	if(!first->is_numeric_real() && second->is_numeric_real()) {
-		Integral integral = first->number_i;
-
-		first->type = LispType::AtomNumericReal;
-		first->number_r = integral;
-	}
-
-	return true;
-}
-
 LispNodeRC eval_gen0(LispNodeRC input, LispNodeRC environment) {
 	const LispNodeRC &operator_name = input->head->item;
 
@@ -771,11 +742,91 @@ LispNodeRC eval_gen2(LispNodeRC input, LispNodeRC environment) {
 	LispNodeRC result = nullptr;
 
 	if(operation_index >= OP_PLUS && operation_index <= OP_BIGGER_EQUAL) {
-		if(!check_arithmethic_and_promote(operator_name->string, output1, output2)) {
+		if(!output1->is_numeric() || !output2->is_numeric()) {
+			print_error(operator_name->string, "argument type error\n");
+
 			return nullptr;
 		}
 
+		bool promote1 = false;
+		bool promote2 = false;
+
+		if(output1->is_numeric_real() && !output2->is_numeric_real()) {
+			output2->promoteReal();
+			promote2 = true;
+		}
+
+		if(!output1->is_numeric_real() && output2->is_numeric_real()) {
+			output1->promoteReal();
+			promote1 = true;
+		}
+
 		result = new LispNode(output1->type);
+
+		if(output1->type == LispType::AtomNumericIntegral) {
+			switch(operation_index) {
+				case OP_PLUS:
+					result->number_i = (output1->number_i + output2->number_i);
+					break;
+				case OP_MINUS:
+					result->number_i = (output1->number_i - output2->number_i);
+					break;
+				case OP_TIMES:
+					result->number_i = (output1->number_i * output2->number_i);
+					break;
+				case OP_DIVIDE:
+					result->number_i = (output1->number_i / output2->number_i);
+					break;
+				case OP_LESS:
+					return (output1->number_i < output2->number_i) ? atom_true : atom_false;
+				case OP_BIGGER:
+					return (output1->number_i > output2->number_i) ? atom_true : atom_false;
+				case OP_EQUAL:
+					return (output1->number_i == output2->number_i) ? atom_true : atom_false;
+				case OP_LESS_EQUAL:
+					return (output1->number_i <= output2->number_i) ? atom_true : atom_false;
+				case OP_BIGGER_EQUAL:
+					return (output1->number_i >= output2->number_i) ? atom_true : atom_false;
+			}
+
+			return result;
+		}
+		else {
+			switch(operation_index) {
+				case OP_PLUS:
+					result->number_r = (output1->number_r + output2->number_r);
+					break;
+				case OP_MINUS:
+					result->number_r = (output1->number_r - output2->number_r);
+					break;
+				case OP_TIMES:
+					result->number_r = (output1->number_r * output2->number_r);
+					break;
+				case OP_DIVIDE:
+					result->number_r = (output1->number_r / output2->number_r);
+					break;
+				case OP_LESS:
+					return (output1->number_r < output2->number_r) ? atom_true : atom_false;
+				case OP_BIGGER:
+					return (output1->number_r > output2->number_r) ? atom_true : atom_false;
+				case OP_EQUAL:
+					return (output1->number_r == output2->number_r) ? atom_true : atom_false;
+				case OP_LESS_EQUAL:
+					return (output1->number_r <= output2->number_r) ? atom_true : atom_false;
+				case OP_BIGGER_EQUAL:
+					return (output1->number_r >= output2->number_r) ? atom_true : atom_false;
+			}
+
+			if(promote1) {
+				output1->demoteReal();
+			}
+
+			if(promote2) {
+				output2->demoteReal();
+			}
+
+			return result;
+		}
 	}
 
 	switch(operation_index) {
@@ -783,77 +834,6 @@ LispNodeRC eval_gen2(LispNodeRC input, LispNodeRC environment) {
 			return make_cons(output1, output2);
 		case OP_EQ_Q:
 			return (*output1 == *output2) ?  atom_true : atom_false;
-		case OP_PLUS:
-			if(output1->type == LispType::AtomNumericIntegral) {
-				result->number_i = (output1->number_i + output2->number_i);
-			}
-			else {
-				result->number_r = (output1->number_r + output2->number_r);
-			}
-
-			break;
-		case OP_MINUS:
-			if(output1->type == LispType::AtomNumericIntegral) {
-				result->number_i = (output1->number_i - output2->number_i);
-			}
-			else {
-				result->number_r = (output1->number_r - output2->number_r);
-			}
-
-			break;
-		case OP_TIMES:
-			if(output1->type == LispType::AtomNumericIntegral) {
-				result->number_i = (output1->number_i * output2->number_i);
-			}
-			else {
-				result->number_r = (output1->number_r * output2->number_r);
-			}
-
-			break;
-		case OP_DIVIDE:
-			if(output1->type == LispType::AtomNumericIntegral) {
-				result->number_i = (output1->number_i / output2->number_i);
-			}
-			else {
-				result->number_r = (output1->number_r / output2->number_r);
-			}
-
-			break;
-		case OP_LESS:
-			if(output1->type == LispType::AtomNumericIntegral) {
-				return (output1->number_i < output2->number_i) ? atom_true : atom_false;
-			}
-			else {
-				return (output1->number_r < output2->number_r) ? atom_true : atom_false;
-			}
-		case OP_BIGGER:
-			if(output1->type == LispType::AtomNumericIntegral) {
-				return (output1->number_i > output2->number_i) ? atom_true : atom_false;
-			}
-			else {
-				return (output1->number_r > output2->number_r) ? atom_true : atom_false;
-			}
-		case OP_EQUAL:
-			if(output1->type == LispType::AtomNumericIntegral) {
-				return (output1->number_i == output2->number_i) ? atom_true : atom_false;
-			}
-			else {
-				return (output1->number_r == output2->number_r) ? atom_true : atom_false;
-			}
-		case OP_LESS_EQUAL:
-			if(output1->type == LispType::AtomNumericIntegral) {
-				return (output1->number_i <= output2->number_i) ? atom_true : atom_false;
-			}
-			else {
-				return (output1->number_r <= output2->number_r) ? atom_true : atom_false;
-			}
-		case OP_BIGGER_EQUAL:
-			if(output1->type == LispType::AtomNumericIntegral) {
-				return (output1->number_i >= output2->number_i) ? atom_true : atom_false;
-			}
-			else {
-				return (output1->number_r >= output2->number_r) ? atom_true : atom_false;
-			}
     	case OP_STRING_APPEND:
 			if(!output1->is_string() || !output2->is_string()) {
 				print_error("string-append", "argument type error\n");
@@ -1311,7 +1291,7 @@ LispNodeRC eval_expression(LispNodeRC input, LispNodeRC environment) {
 
 		return nullptr;
 	}
-
+	
 	const LispNodeRC &first = input->head->item;
 
 	if(first->is_atom() && first->is_pure()) {
@@ -1440,13 +1420,7 @@ void fill_initial_environment() {
 
 int main(int argc, char **argv) {
 #ifdef TARGET_6502
-	#ifdef SIMPLE_ALLOCATOR
-		void *lisp_heap = malloc(LISP_HEAP_SIZE);
-
-		allocator.init(lisp_heap, reinterpret_cast<char *>(lisp_heap) + LISP_HEAP_SIZE);
-	#else
-		__set_heap_limit(LISP_HEAP_SIZE);
-	#endif /* SIMPLE_ALLOCATOR */
+	__set_heap_limit(LISP_HEAP_SIZE);
 #endif /* TARGET_6502 */
 
 	// Setup global constants
@@ -1512,12 +1486,6 @@ int main(int argc, char **argv) {
 	list_empty = nullptr;
 
 	global_environment = nullptr;
-
-#ifdef TARGET_6502
-	#ifdef SIMPLE_ALLOCATOR
-		free(lisp_heap);
-	#endif /* SIMPLE_ALLOCATOR */
-#endif /* TARGET_6502 */
 
 	return EXIT_SUCCESS;
 }

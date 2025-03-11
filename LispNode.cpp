@@ -69,6 +69,24 @@ bool LispNode::is_numeric_real() {
 	return (type == LispType::AtomNumericReal);
 }
 
+void LispNode::promoteReal() {
+	Integral integral = number_i;
+
+	type = LispType::AtomNumericReal;
+	number_r = integral;
+}
+
+void LispNode::demoteReal() {
+	Real real = number_r;
+
+	type = LispType::AtomNumericIntegral;
+#ifdef TARGET_6502
+	number_i = real.as_i();
+#else
+	number_i = real;
+#endif /* TARGET_6502 */
+}
+
 void LispNode::print() {
 	switch(type) {
 		case AtomPure:

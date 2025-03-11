@@ -57,6 +57,9 @@ public:
 	bool is_numeric_integral();
 	bool is_numeric_real();
 
+	void promoteReal();
+	void demoteReal();
+
 	void print();
 };
 

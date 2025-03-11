@@ -1,74 +1,78 @@
+#include <new>
+#include <stdio.h>
+
 #include "SimpleAllocator.h"
 
-void SimpleAllocator::init(void *base, void *limit) {
-	this->base = base;
-	this->limit = limit;
-
-	for(Chunk *chunk = reinterpret_cast<Chunk *>(base); chunk < reinterpret_cast<Chunk *>(limit); chunk += 1) {
-		chunk->size = 0;
-
-		this->bytes_available += DATA_BYTES;
+SimpleAllocator::SimpleAllocator(): head{nullptr} {
+	for(auto i = 0; i < NUMBER_STANDARD_ALLOCATIONS; i++) {
+		number_available[i] = 0;
 	}
 }
 
-void *SimpleAllocator::malloc(int size) {
-	Chunk *free_chunk = nullptr;
+SimpleAllocator::~SimpleAllocator() {
+	Chunk *former_head;
 
-	for(Chunk *chunk = reinterpret_cast<Chunk *>(base); chunk < reinterpret_cast<Chunk *>(limit); chunk += 1) {
-		// Ignore the free chunks for now, but keep track of the first one found
-		if(chunk->size == 0) {
-			if(free_chunk == nullptr) {
-				free_chunk = chunk;
-			}
+	while(head) {
+		former_head = head;
+		head = head->next;
 
-			continue;
-		}
-
-		// If we found a non-free chunk with block size that's different from our required size, try a different one
-		if(chunk->size != size) {
-			continue;
-		}
-
-		// If we find an appropriately-sized, non-free chunk with an empty slot, use the slot
-		for(int i = 0; i < (chunk->data_bytes() / chunk->size); i++) {
-			if(BITMAP_GET(chunk->bitmap, i) == 0) {
-				BITMAP_SET_ON(chunk->bitmap, i);
-
-				// Adjust bytes_available for the allocation
-				bytes_available -= chunk->size;
-
-				return DATA_GET(chunk->data(), chunk->size, i);
-			}
-		}
+		free(former_head);
 	}
-
-	// If we could not allocate in the non-free chunks above, create a new one
-	if(free_chunk) {
-		free_chunk->size = size;
-
-		// Adjust bytes_available for internal fragmentation loss and the actual allocation
-		bytes_available -= (free_chunk->data_bytes() % free_chunk->size);
-		bytes_available -= free_chunk->size;
-
-		for(int i = 0; i < free_chunk->bitmap_bytes(); i++) {
-			free_chunk->bitmap[i] = 0;
-		}
-
-		BITMAP_SET_ON(free_chunk->bitmap, 0);
-
-		return DATA_GET(free_chunk->data(), free_chunk->size, 0);
-	}
-
-	return nullptr;
 }
 
-void SimpleAllocator::free(void *pointer) {
-	unsigned int chunk_number = (reinterpret_cast<char *>(pointer) - reinterpret_cast<char *>(base)) / sizeof(Chunk);
+void *SimpleAllocator::allocate(int size) {
+	int allocation_index = -1;
 
-	Chunk *chunk = reinterpret_cast<Chunk *>(reinterpret_cast<Chunk *>(base) + chunk_number);
-	
-	unsigned int chunk_position = (reinterpret_cast<char *>(pointer) - chunk->data()) / chunk->size;
+	for(auto i = 0; i < NUMBER_STANDARD_ALLOCATIONS; i++) {
+		if(STANDARD_ALLOCATIONS[i] == size) {
+			allocation_index = i;
+			break;
+		}
+	}
 
-	bytes_available += chunk->size;
-	BITMAP_SET_OFF(chunk->bitmap, chunk_position);
+	if(allocation_index != 1) {
+		if(number_available[allocation_index] == 0) {
+			char *chunk_block = (char *) malloc(sizeof(Chunk) + (CHUNK_SIZE * STANDARD_ALLOCATIONS[allocation_index]));
+
+			head = new(chunk_block) Chunk((uint8_t) allocation_index, (chunk_block + sizeof(Chunk)), head);
+
+			number_available[allocation_index] += CHUNK_SIZE;
+		}
+
+		for(Chunk *current = head; current != nullptr; current = current->next) {
+			if(current->allocation_index != allocation_index) {
+				continue;
+			}
+
+			for(auto i = 0; i < CHUNK_SIZE; i++) {
+				if(!BITMAP_GET(current->bitmap, i)) {
+					BITMAP_SET_ON(current->bitmap, i);
+
+					number_available[allocation_index]--;
+					current->number_available--;
+
+					return reinterpret_cast<void *>(current->data + (i * STANDARD_ALLOCATIONS[current->allocation_index]));
+				}
+			}
+		}
+	}
+
+	return malloc(size);
+}
+
+void SimpleAllocator::deallocate(void *pointer) {
+	for(Chunk *current = head; current != nullptr; current = current->next) {
+		if(pointer >= current->data && pointer < current->limit) {
+			int position = (reinterpret_cast<char *>(pointer) - current->data) / STANDARD_ALLOCATIONS[current->allocation_index];
+
+			BITMAP_SET_OFF(current->bitmap, position);
+
+			number_available[current->allocation_index]++;
+			current->number_available++;
+
+			return;
+		}
+	}
+
+	free(pointer);
 }
