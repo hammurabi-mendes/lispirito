@@ -46,29 +46,28 @@ public:
 
 	bool operator==(const LispNode &other) const;
 
-	bool is_atom();
-	bool is_list();
+	bool is_atom() const;
+	bool is_list() const;
 
-	bool is_pure();
-	bool is_boolean();
-	bool is_string();
-	bool is_character();
-	bool is_numeric();
-	bool is_numeric_integral();
-	bool is_numeric_real();
+	bool is_pure() const;
+	bool is_boolean() const;
+	bool is_string() const;
+	bool is_character() const;
+	bool is_numeric() const;
+	bool is_numeric_integral() const;
+	bool is_numeric_real() const;
 
 	void promoteReal();
 	void demoteReal();
 
-	void print();
+	void print() const;
 };
 
 struct Box {
 	LispNodeRC item;
 	BoxRC next;
 
-	Box(const LispNodeRC &item): item{item}, next{nullptr} {}
-	Box(LispNodeRC &&item) noexcept: item{item}, next{nullptr} {}
+	Box(const LispNodeRC &item);
 
 	Box *get_next_pointer() const {
 		return next.get_pointer();

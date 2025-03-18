@@ -11,7 +11,10 @@ private:
     T *pointer;
 
 public:
-    RCPointer(T *pointer = nullptr): pointer(nullptr) {
+    RCPointer(): pointer(nullptr) {
+    }
+
+    RCPointer(T *pointer): pointer(nullptr) {
         set(pointer);
     }
 
@@ -20,7 +23,7 @@ public:
     }
 
     RCPointer &operator=(T *other_pointer) {
-        if(this->pointer != other_pointer) {
+        if(pointer != other_pointer) {
             set(other_pointer);
         }
 
@@ -66,18 +69,18 @@ public:
 
 private:
     void set(T *pointer_new) noexcept {
+        if(pointer_new) {
+            CounterType *reference_counter_new = ((CounterType *) pointer_new) - 1;
+
+            (*reference_counter_new)++;
+        }
+
         if(pointer) {
             CounterType *reference_counter = ((CounterType *) pointer) - 1;
 
             if(--(*reference_counter) == 0) {
                 delete pointer;
             }
-        }
-
-        if(pointer_new) {
-            CounterType *reference_counter_new = ((CounterType *) pointer_new) - 1;
-
-            (*reference_counter_new)++;
         }
 
         pointer = pointer_new;

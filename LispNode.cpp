@@ -33,39 +33,39 @@ bool LispNode::operator==(const LispNode &other) const {
 	}
 }
 
-bool LispNode::is_atom() {
+bool LispNode::is_atom() const {
 	return (type != LispType::List);
 }
 
-bool LispNode::is_list() {
+bool LispNode::is_list() const {
 	return (type == LispType::List);
 }
 
-bool LispNode::is_pure() {
+bool LispNode::is_pure() const {
 	return (!is_boolean() && !is_numeric() && !is_string() && !is_character());
 }
 
-bool LispNode::is_boolean() {
+bool LispNode::is_boolean() const {
 	return (type == LispType::AtomBoolean);
 }
 
-bool LispNode::is_string() {
+bool LispNode::is_string() const {
 	return (type == LispType::AtomString);
 }
 
-bool LispNode::is_character() {
+bool LispNode::is_character() const {
 	return (type == LispType::AtomCharacter);
 }
 
-bool LispNode::is_numeric() {
+bool LispNode::is_numeric() const {
 	return (type == LispType::AtomNumericIntegral || type == LispType::AtomNumericReal);
 }
 
-bool LispNode::is_numeric_integral() {
+bool LispNode::is_numeric_integral() const {
 	return (type == LispType::AtomNumericIntegral);
 }
 
-bool LispNode::is_numeric_real() {
+bool LispNode::is_numeric_real() const {
 	return (type == LispType::AtomNumericReal);
 }
 
@@ -87,7 +87,7 @@ void LispNode::demoteReal() {
 #endif /* TARGET_6502 */
 }
 
-void LispNode::print() {
+void LispNode::print() const {
 	switch(type) {
 		case AtomPure:
 		case AtomBoolean:
@@ -122,3 +122,5 @@ void LispNode::print() {
 			fputs(")", stdout);
 	}
 }
+
+Box::Box(const LispNodeRC &item): item{item} {}

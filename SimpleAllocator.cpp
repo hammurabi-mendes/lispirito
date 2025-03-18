@@ -48,7 +48,7 @@ void *SimpleAllocator::allocate(int size) {
 				if(!BITMAP_GET(current->bitmap, i)) {
 					BITMAP_SET_ON(current->bitmap, i);
 
-					number_available[allocation_index]--;
+					number_available[current->allocation_index]--;
 					current->number_available--;
 
 					return reinterpret_cast<void *>(current->data + (i * STANDARD_ALLOCATIONS[current->allocation_index]));

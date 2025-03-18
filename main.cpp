@@ -610,10 +610,10 @@ LispNodeRC eval_gen1(LispNodeRC input, LispNodeRC environment) {
 				return nullptr;
 			}
 
-			output1->type = LispType::AtomNumericReal;
-			output1->number_r = output1->number_i;
+			result = new LispNode(LispType::AtomNumericReal);
+			result->number_r = output1->number_i;
 
-			return output1;
+			break;
 		case OP_REAL_INTEGER:
 			if(!output1->is_numeric_real()) {
 				print_error("real->integer", "argument type error\n");
@@ -621,14 +621,14 @@ LispNodeRC eval_gen1(LispNodeRC input, LispNodeRC environment) {
 				return nullptr;
 			}
 
-			output1->type = LispType::AtomNumericIntegral;
+			result = new LispNode(LispType::AtomNumericIntegral);
 #ifdef TARGET_6502
-			output1->number_i = output1->number_r.as_f();
+			result->number_i = output1->number_r.as_f();
 #else
-			output1->number_i = output1->number_r;
+			result->number_i = output1->number_r;
 #endif /* TARGET_6502 */
 
-			return output1;
+			break;
 		case OP_NOT:
 			if(!output1->is_boolean()) {
 				print_error("not", "argument type error\n");
@@ -644,9 +644,10 @@ LispNodeRC eval_gen1(LispNodeRC input, LispNodeRC environment) {
 				return nullptr;
 			}
 
-			output1->type = AtomCharacter;
+			result = new LispNode(LispType::AtomCharacter);
+			result->number_i = output1->number_i;
 
-			return output1;
+			break;
     	case OP_CHAR_INTEGER:
 			if(!output1->is_character()) {
 				print_error("char->integer", "argument type error\n");
@@ -654,9 +655,10 @@ LispNodeRC eval_gen1(LispNodeRC input, LispNodeRC environment) {
 				return nullptr;
 			}
 
-			output1->type = AtomNumericIntegral;
+			result = new LispNode(LispType::AtomNumericIntegral);
+			result->number_i = output1->number_i;
 
-			return output1;
+			break;
     	case OP_NUMBER_STRING:
 			if(!output1->is_numeric()) {
 				print_error("number->string", "argument type error\n");
@@ -674,7 +676,6 @@ LispNodeRC eval_gen1(LispNodeRC input, LispNodeRC environment) {
 			}
 
 			result = new LispNode(LispType::AtomString);
-
 			result->string = strdup(string_buffer);
 
 			break;
@@ -702,7 +703,6 @@ LispNodeRC eval_gen1(LispNodeRC input, LispNodeRC environment) {
 			}
 
 			result = new LispNode(LispType::AtomNumericIntegral);
-
 			result->number_i = strlen(output1->string);
 
 			break;
@@ -763,6 +763,8 @@ LispNodeRC eval_gen2(LispNodeRC input, LispNodeRC environment) {
 
 		result = new LispNode(output1->type);
 
+		bool comparison_result;
+
 		if(output1->type == LispType::AtomNumericIntegral) {
 			switch(operation_index) {
 				case OP_PLUS:
@@ -778,18 +780,21 @@ LispNodeRC eval_gen2(LispNodeRC input, LispNodeRC environment) {
 					result->number_i = (output1->number_i / output2->number_i);
 					break;
 				case OP_LESS:
-					return (output1->number_i < output2->number_i) ? atom_true : atom_false;
+					comparison_result = (output1->number_i < output2->number_i);
+					break;
 				case OP_BIGGER:
-					return (output1->number_i > output2->number_i) ? atom_true : atom_false;
+					comparison_result = (output1->number_i > output2->number_i);
+					break;
 				case OP_EQUAL:
-					return (output1->number_i == output2->number_i) ? atom_true : atom_false;
+					comparison_result = (output1->number_i == output2->number_i);
+					break;
 				case OP_LESS_EQUAL:
-					return (output1->number_i <= output2->number_i) ? atom_true : atom_false;
+					comparison_result = (output1->number_i <= output2->number_i);
+					break;
 				case OP_BIGGER_EQUAL:
-					return (output1->number_i >= output2->number_i) ? atom_true : atom_false;
+					comparison_result = (output1->number_i >= output2->number_i);
+					break;
 			}
-
-			return result;
 		}
 		else {
 			switch(operation_index) {
@@ -806,15 +811,20 @@ LispNodeRC eval_gen2(LispNodeRC input, LispNodeRC environment) {
 					result->number_r = (output1->number_r / output2->number_r);
 					break;
 				case OP_LESS:
-					return (output1->number_r < output2->number_r) ? atom_true : atom_false;
+					comparison_result = (output1->number_r < output2->number_r);
+					break;
 				case OP_BIGGER:
-					return (output1->number_r > output2->number_r) ? atom_true : atom_false;
+					comparison_result = (output1->number_r > output2->number_r);
+					break;
 				case OP_EQUAL:
-					return (output1->number_r == output2->number_r) ? atom_true : atom_false;
+					comparison_result = (output1->number_r == output2->number_r);
+					break;
 				case OP_LESS_EQUAL:
-					return (output1->number_r <= output2->number_r) ? atom_true : atom_false;
+					comparison_result = (output1->number_r <= output2->number_r);
+					break;
 				case OP_BIGGER_EQUAL:
-					return (output1->number_r >= output2->number_r) ? atom_true : atom_false;
+					comparison_result = (output1->number_r >= output2->number_r);
+					break;
 			}
 
 			if(promote1) {
@@ -824,16 +834,20 @@ LispNodeRC eval_gen2(LispNodeRC input, LispNodeRC environment) {
 			if(promote2) {
 				output2->demoteReal();
 			}
-
-			return result;
 		}
+
+		if(operation_index >= OP_LESS && operation_index <= OP_BIGGER_EQUAL) {
+			return (comparison_result ? atom_true : atom_false);
+		}
+
+		return result;
 	}
 
 	switch(operation_index) {
 		case OP_CONS:
 			return make_cons(output1, output2);
 		case OP_EQ_Q:
-			return (*output1 == *output2) ?  atom_true : atom_false;
+			return (*output1 == *output2) ? atom_true : atom_false;
     	case OP_STRING_APPEND:
 			if(!output1->is_string() || !output2->is_string()) {
 				print_error("string-append", "argument type error\n");
@@ -841,8 +855,7 @@ LispNodeRC eval_gen2(LispNodeRC input, LispNodeRC environment) {
 				return nullptr;
 			}
 
-			result = new LispNode(AtomString);
-
+			result = new LispNode(LispType::AtomString);
 			result->string = static_cast<char *>(malloc(strlen(output1->string) + strlen(output2->string) + 1));
 
 			result->string[0] = '\0';
@@ -864,7 +877,6 @@ LispNodeRC eval_gen2(LispNodeRC input, LispNodeRC environment) {
 			}
 
 			result = new LispNode(LispType::AtomCharacter);
-
 			result->number_i = output1->string[output2->number_i];
 
 			break;
@@ -876,7 +888,6 @@ LispNodeRC eval_gen2(LispNodeRC input, LispNodeRC environment) {
 			}
 
 			result = new LispNode(LispType::AtomString);
-
 			result->string = static_cast<char *>(malloc(output1->number_i + 1));
 
 			for(size_t i = 0; i < output1->number_i; i++) {
@@ -1291,7 +1302,7 @@ LispNodeRC eval_expression(LispNodeRC input, LispNodeRC environment) {
 
 		return nullptr;
 	}
-	
+
 	const LispNodeRC &first = input->head->item;
 
 	if(first->is_atom() && first->is_pure()) {
