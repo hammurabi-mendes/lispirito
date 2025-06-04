@@ -761,71 +761,10 @@ LispNodeRC eval_gen2(LispNodeRC input, LispNodeRC environment) {
 			promote1 = true;
 		}
 
-		result = new LispNode(output1->type);
+		if (operation_index >= OP_PLUS && operation_index <= OP_DIVIDE) {
+			result = new LispNode(output1->type);
 
-		bool comparison_result;
-
-		if(output1->type == LispType::AtomNumericIntegral) {
-			switch(operation_index) {
-				case OP_PLUS:
-					result->number_i = (output1->number_i + output2->number_i);
-					break;
-				case OP_MINUS:
-					result->number_i = (output1->number_i - output2->number_i);
-					break;
-				case OP_TIMES:
-					result->number_i = (output1->number_i * output2->number_i);
-					break;
-				case OP_DIVIDE:
-					result->number_i = (output1->number_i / output2->number_i);
-					break;
-				case OP_LESS:
-					comparison_result = (output1->number_i < output2->number_i);
-					break;
-				case OP_BIGGER:
-					comparison_result = (output1->number_i > output2->number_i);
-					break;
-				case OP_EQUAL:
-					comparison_result = (output1->number_i == output2->number_i);
-					break;
-				case OP_LESS_EQUAL:
-					comparison_result = (output1->number_i <= output2->number_i);
-					break;
-				case OP_BIGGER_EQUAL:
-					comparison_result = (output1->number_i >= output2->number_i);
-					break;
-			}
-		}
-		else {
-			switch(operation_index) {
-				case OP_PLUS:
-					result->number_r = (output1->number_r + output2->number_r);
-					break;
-				case OP_MINUS:
-					result->number_r = (output1->number_r - output2->number_r);
-					break;
-				case OP_TIMES:
-					result->number_r = (output1->number_r * output2->number_r);
-					break;
-				case OP_DIVIDE:
-					result->number_r = (output1->number_r / output2->number_r);
-					break;
-				case OP_LESS:
-					comparison_result = (output1->number_r < output2->number_r);
-					break;
-				case OP_BIGGER:
-					comparison_result = (output1->number_r > output2->number_r);
-					break;
-				case OP_EQUAL:
-					comparison_result = (output1->number_r == output2->number_r);
-					break;
-				case OP_LESS_EQUAL:
-					comparison_result = (output1->number_r <= output2->number_r);
-					break;
-				case OP_BIGGER_EQUAL:
-					comparison_result = (output1->number_r >= output2->number_r);
-					break;
-			}
+			result->op_arithmetic(operation_index, output1, output2);
 
 			if(promote1) {
 				output1->demoteReal();
@@ -834,13 +773,23 @@ LispNodeRC eval_gen2(LispNodeRC input, LispNodeRC environment) {
 			if(promote2) {
 				output2->demoteReal();
 			}
+
+			return result;
 		}
 
 		if(operation_index >= OP_LESS && operation_index <= OP_BIGGER_EQUAL) {
+			bool comparison_result = output1->op_comparison(operation_index, output2);
+
+			if(promote1) {
+				output1->demoteReal();
+			}
+
+			if(promote2) {
+				output2->demoteReal();
+			}
+
 			return (comparison_result ? atom_true : atom_false);
 		}
-
-		return result;
 	}
 
 	switch(operation_index) {

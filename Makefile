@@ -33,7 +33,7 @@ else
 endif
 
 PROGRAMS=lispirito
-DEPENDENCIES=main.o LispNode.o extra.o
+DEPENDENCIES=main.o LispNode.o extra.o operators.o
 
 ifeq ($(SIMPLE_ALLOCATOR), 1)
 DEPENDENCIES+=SimpleAllocator.o

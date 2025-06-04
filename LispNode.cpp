@@ -1,5 +1,6 @@
 #include "LispNode.h"
 
+#include "operators.h"
 #include "extra.h"
 
 LispNode::LispNode(LispType type): type{type}, head{nullptr} {
@@ -67,6 +68,96 @@ bool LispNode::is_numeric_integral() const {
 
 bool LispNode::is_numeric_real() const {
 	return (type == LispType::AtomNumericReal);
+}
+
+void LispNode::op_arithmetic(int operation, LispNodeRC &first, LispNodeRC &second) {
+	is_numeric_integral() ? op_arithmetic_integer(operation, first, second) : op_arithmetic_real(operation, first, second);
+}
+
+bool LispNode::op_comparison(int operation, LispNodeRC &other) {
+	return (is_numeric_integral() ? op_comparison_integer(operation, other) : op_comparison_real(operation, other));
+}
+
+void LispNode::op_arithmetic_integer(int operation, LispNodeRC &first, LispNodeRC &second) {
+	switch(operation) {
+		case OP_PLUS:
+			number_i = (first->number_i + second->number_i);
+			break;
+		case OP_MINUS:
+			number_i = (first->number_i - second->number_i);
+			break;
+		case OP_TIMES:
+			number_i = (first->number_i * second->number_i);
+			break;
+		case OP_DIVIDE:
+			number_i = (first->number_i / second->number_i);
+			break;
+	}
+}
+
+void LispNode::op_arithmetic_real(int operation, LispNodeRC &first, LispNodeRC &second) {
+	switch(operation) {
+		case OP_PLUS:
+			number_r = (first->number_r + second->number_r);
+			break;
+		case OP_MINUS:
+			number_r = (first->number_r - second->number_r);
+			break;
+		case OP_TIMES:
+			number_r = (first->number_r * second->number_r);
+			break;
+		case OP_DIVIDE:
+			number_r = (first->number_r / second->number_r);
+			break;
+	}
+}
+
+bool LispNode::op_comparison_integer(int operation, LispNodeRC &other) {
+	bool comparison_result = false;
+
+	switch(operation) {
+		case OP_LESS:
+			comparison_result = (number_i < other->number_i);
+			break;
+		case OP_BIGGER:
+			comparison_result = (number_i > other->number_i);
+			break;
+		case OP_EQUAL:
+			comparison_result = (number_i == other->number_i);
+			break;
+		case OP_LESS_EQUAL:
+			comparison_result = (number_i <= other->number_i);
+			break;
+		case OP_BIGGER_EQUAL:
+			comparison_result = (number_i >= other->number_i);
+			break;
+	}
+
+	return comparison_result;
+}
+
+bool LispNode::op_comparison_real(int operation, LispNodeRC &other) {
+	bool comparison_result = false;
+
+	switch(operation) {
+		case OP_LESS:
+			comparison_result = (number_r < other->number_r);
+			break;
+		case OP_BIGGER:
+			comparison_result = (number_r > other->number_r);
+			break;
+		case OP_EQUAL:
+			comparison_result = (number_r == other->number_r);
+			break;
+		case OP_LESS_EQUAL:
+			comparison_result = (number_r <= other->number_r);
+			break;
+		case OP_BIGGER_EQUAL:
+			comparison_result = (number_r >= other->number_r);
+			break;
+	}
+
+	return comparison_result;
 }
 
 void LispNode::promoteReal() {
