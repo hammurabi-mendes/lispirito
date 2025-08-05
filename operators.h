@@ -59,6 +59,7 @@ enum LispOperation {
     OP_EVAL,
     OP_LAMBDA,
     OP_MACRO,
+    OP_CLOSURE,
     OP_READ,
     OP_WRITE,
     OP_CURRENT_ENVIRONMENT

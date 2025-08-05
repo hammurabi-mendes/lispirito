@@ -20,25 +20,29 @@ SANITIZE=
 else
 STANDARD=-std=c++20
 OPTIMIZATION=-O3
-SANITIZE= -fsanitize=address
+SANITIZE=-fsanitize=address
 endif
-
-CPPFLAGS=$(STANDARD) $(CFLAGS)
 
 ifeq ($(DEBUG), 1)
 	CFLAGS+=-g -DDEBUG $(SANITIZE)
 else
-	CFLAGS+=$(OPTIMIZATION) -flto
+	CFLAGS+=$(OPTIMIZATION) -flto -foptimize-sibling-calls
 	LDFLAGS+=-flto
 endif
 
-PROGRAMS=lispirito
-DEPENDENCIES=main.o LispNode.o extra.o operators.o
-
 ifeq ($(SIMPLE_ALLOCATOR), 1)
 DEPENDENCIES+=SimpleAllocator.o
-CFLAGS += -DSIMPLE_ALLOCATOR
+CFLAGS+=-DSIMPLE_ALLOCATOR
 endif
+
+ifeq ($(INITIAL_ENVIRONMENT), 1)
+CFLAGS+=-DINITIAL_ENVIRONMENT
+endif
+
+CPPFLAGS=$(STANDARD) $(CFLAGS)
+
+PROGRAMS=lispirito
+DEPENDENCIES=main.o LispNode.o extra.o operators.o
 
 all: $(PROGRAMS)
 

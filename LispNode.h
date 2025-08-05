@@ -57,6 +57,8 @@ public:
 	bool is_numeric_integral() const;
 	bool is_numeric_real() const;
 
+	bool is_operator(char *op) const;
+
 	void op_arithmetic(int operation, LispNodeRC &first, LispNodeRC &second);
 	bool op_comparison(int operation, LispNodeRC &other);
 

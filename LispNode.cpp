@@ -17,6 +17,10 @@ LispNode::~LispNode() {
 }
 
 bool LispNode::operator==(const LispNode &other) const {
+	if(type != other.type) {
+		return false;
+	}
+
 	switch(type) {
 		case AtomPure:
 		case AtomBoolean:
@@ -43,7 +47,7 @@ bool LispNode::is_list() const {
 }
 
 bool LispNode::is_pure() const {
-	return (!is_boolean() && !is_numeric() && !is_string() && !is_character());
+	return (type == LispType::AtomPure);
 }
 
 bool LispNode::is_boolean() const {
@@ -68,6 +72,10 @@ bool LispNode::is_numeric_integral() const {
 
 bool LispNode::is_numeric_real() const {
 	return (type == LispType::AtomNumericReal);
+}
+
+bool LispNode::is_operator(char *op) const {
+	return (is_list() && head->item != nullptr && head->item->is_atom() && strcmp(head->item->string, op) == 0);
 }
 
 void LispNode::op_arithmetic(int operation, LispNodeRC &first, LispNodeRC &second) {
@@ -200,6 +208,24 @@ void LispNode::print() const {
 			print_real(number_r);
 			break;
 		case List:
+			if(is_operator("closure")) {
+				fputs("#", stdout);
+				fputs("closure", stdout);
+				break;
+			}
+
+			if(is_operator("lambda")) {
+				fputs("#", stdout);
+				fputs("lambda", stdout);
+				break;
+			}
+
+			if(is_operator("macro")) {
+				fputs("#", stdout);
+				fputs("macro", stdout);
+				break;
+			}
+
 			fputs("(", stdout);
 			
 			for(Box *current = get_head_pointer(); current != nullptr; current = current->get_next_pointer()) {

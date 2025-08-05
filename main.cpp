@@ -155,7 +155,8 @@ LispNodeRC make_query_optional_replace(const LispNodeRC &term, const LispNodeRC 
 		if(*term == *key) {
 			if(replacement.get_pointer() != nullptr) {
 				LispNodeRC &value_noconst = current_pair->head->next->item;
-				value_noconst = replacement;
+
+				value_noconst = replacement.get_pointer();
 			}
 
 			return value;
@@ -330,37 +331,35 @@ int examine_string(char *token) {
 LispNodeRC parse_atom(char *token) {
 	int output = examine_string(token);
 
-	if(output & PARSE_CHARACTER) {
-		LispNodeRC result = new LispNode(LispType::AtomCharacter);
+	LispNode *result = new LispNode(LispType::AtomPure);
 
+	if(output & PARSE_CHARACTER) {
+		result->type = LispType::AtomCharacter;
 		result->number_i = token[2];
 
 		return result;
 	}
 
 	if(output & PARSE_QUOTED) {
-		LispNodeRC result = new LispNode(LispType::AtomString);
-
 		// Remove quotes
 		token[strlen(token) - 1] = '\0';
 		token++;
 
+		result->type = LispType::AtomString;
 		result->string = strdup(token);
 
 		return result;
 	}
 
 	if(!(output & PARSE_ALPHA) && (output & PARSE_DIGIT) && (output & PARSE_DOT)) {
-		LispNodeRC result = new LispNode(LispType::AtomNumericReal);
-
+		result->type = LispType::AtomNumericReal;
 		result->number_r = atof(token);
 
 		return result;
 	}
 
 	if(!(output & PARSE_ALPHA) && (output & PARSE_DIGIT) && !(output & PARSE_DOT)) {
-		LispNodeRC result = new LispNode(LispType::AtomNumericIntegral);
-
+		result->type = LispType::AtomNumericIntegral;
 		result->number_i = atol(token);
 
 		return result;
@@ -376,10 +375,10 @@ LispNodeRC parse_atom(char *token) {
 		return atom_false;	
 	}
 
-	LispNodeRC result = new LispNode(LispType::AtomPure);
-
+	result->type = LispType::AtomPure;
 	result->string = strdup(token);
 
+	// Converted to LispNodeRC
 	return result;
 }
 
@@ -395,14 +394,13 @@ LispNodeRC parse_expression(char *buffer, size_t buffer_length, size_t &position
 	if(strcmp(token, "'") == 0) {
 		LispNodeRC result = new LispNode(LispType::List);
 
-		LispNodeRC quote = make_operator("quote");
 		LispNodeRC quoted = parse_expression(buffer, buffer_length, position, error);
 
 		if(error) {
 			return nullptr;
 		}
 
-		return make2(quote, quoted);
+		return make2(make_operator("quote"), quoted);
 	}
 	
 	if(strcmp(token, "(") == 0) {
@@ -572,7 +570,7 @@ LispNodeRC eval_gen1(LispNodeRC input, LispNodeRC environment) {
 	}
 
 	int operation_index = get_operation_index(operator_name->string);
-	LispNodeRC result = nullptr;
+	LispNode *result = nullptr;
 
 	if(operation_index == OP_CAR || operation_index == OP_CDR) {
 		if(!output1->is_list() || output1->head == nullptr) {
@@ -659,14 +657,14 @@ LispNodeRC eval_gen1(LispNodeRC input, LispNodeRC environment) {
 			result->number_i = output1->number_i;
 
 			break;
-    	case OP_NUMBER_STRING:
+    	case OP_NUMBER_STRING: {
 			if(!output1->is_numeric()) {
 				print_error("number->string", "argument type error\n");
 
 				return nullptr;
 			}
 
-			char string_buffer[MAX_NUMERIC_STRING_LENGTH];
+			char *string_buffer = static_cast<char *>(Allocate(MAX_NUMERIC_STRING_LENGTH));
 
 			if(output1->is_numeric_integral()) {
 				get_integral_string(output1->number_i, string_buffer);
@@ -678,7 +676,10 @@ LispNodeRC eval_gen1(LispNodeRC input, LispNodeRC environment) {
 			result = new LispNode(LispType::AtomString);
 			result->string = strdup(string_buffer);
 
+			Deallocate(string_buffer);
+
 			break;
+		}
     	case OP_STRING_NUMBER:
 			if(!output1->is_string()) {
 				print_error("string->number", "argument type error\n");
@@ -686,7 +687,7 @@ LispNodeRC eval_gen1(LispNodeRC input, LispNodeRC environment) {
 				return nullptr;
 			}
 
-			result = parse_atom(output1->string);
+			result = parse_atom(output1->string).get_pointer();
 
 			if(result == nullptr || !result->is_numeric()) {
 				print_error("string->number", "argument type error\n");
@@ -739,7 +740,7 @@ LispNodeRC eval_gen2(LispNodeRC input, LispNodeRC environment) {
 	}
 
 	int operation_index = get_operation_index(operator_name->string);
-	LispNodeRC result = nullptr;
+	LispNode *result = nullptr;
 
 	if(operation_index >= OP_PLUS && operation_index <= OP_BIGGER_EQUAL) {
 		if(!output1->is_numeric() || !output2->is_numeric()) {
@@ -805,7 +806,7 @@ LispNodeRC eval_gen2(LispNodeRC input, LispNodeRC environment) {
 			}
 
 			result = new LispNode(LispType::AtomString);
-			result->string = static_cast<char *>(malloc(strlen(output1->string) + strlen(output2->string) + 1));
+			result->string = static_cast<char *>(Allocate(strlen(output1->string) + strlen(output2->string) + 1));
 
 			result->string[0] = '\0';
 			strcat(result->string, output1->string);
@@ -837,7 +838,7 @@ LispNodeRC eval_gen2(LispNodeRC input, LispNodeRC environment) {
 			}
 
 			result = new LispNode(LispType::AtomString);
-			result->string = static_cast<char *>(malloc(output1->number_i + 1));
+			result->string = static_cast<char *>(Allocate(output1->number_i + 1));
 
 			for(size_t i = 0; i < output1->number_i; i++) {
 				result->string[i] = static_cast<char>(output2->number_i);
@@ -846,14 +847,15 @@ LispNodeRC eval_gen2(LispNodeRC input, LispNodeRC environment) {
 			result->string[output1->number_i] = '\0';
 
 			break;
-    	case OP_ASSOC:
-			result = make_query_optional_replace(output1, output2);
+    	case OP_ASSOC: {
+				LispNodeRC replaced = make_query_optional_replace(output1, output2);
 
-			if(result == nullptr) {
-				return atom_false;
+				if(replaced == nullptr) {
+					return atom_false;
+				}
+
+				return replaced;
 			}
-
-			break;
 		default:
 			fputs("PANIC: invalid type operator requested\n", stdout);
 			exit(EXIT_FAILURE);
@@ -884,7 +886,7 @@ LispNodeRC eval_gen3(LispNodeRC input, LispNodeRC environment) {
 	}
 
 	int operation_index = get_operation_index(operator_name->string);
-	LispNodeRC result = nullptr;
+	LispNode *result = nullptr;
 
 	switch(operation_index) {
     	case OP_STRING_SET_E:
@@ -976,7 +978,7 @@ LispNodeRC eval_define(LispNodeRC input, LispNodeRC environment) {
 	const LispNodeRC &argument1 = input->head->next->item;
 	const LispNodeRC &argument2 = input->head->next->next->item;
 
-	LispNodeRC output1 = argument1->is_atom() ? argument1 : eval_expression(argument1, environment);
+	LispNodeRC output1 = (argument1->is_atom() && argument1->is_pure()) ? argument1 : eval_expression(argument1, environment);
 	LispNodeRC output2 = eval_expression(argument2, environment);
 
 	if(output1 == nullptr || output2 == nullptr) {
@@ -1001,6 +1003,13 @@ LispNodeRC eval_define(LispNodeRC input, LispNodeRC environment) {
 		make_query_optional_replace(output1, *context_environment, output2);
 	}
 
+	// Make closures' environments to include their own definition (for recursion)
+	if(output2->is_operator("closure")) {
+		LispNodeRC &procedure_name = output2->head->next->next->next->item;
+
+		procedure_name = output1;
+	}
+
 	return *context_environment;
 }
 
@@ -1019,7 +1028,7 @@ LispNodeRC eval_eval(LispNodeRC input, LispNodeRC environment) {
 	return eval_expression(argument1, output2);
 }
 
-LispNodeRC eval_lambda(LispNodeRC input, LispNodeRC environment) {
+LispNodeRC eval_procedure(const LispNodeRC &input, const LispNodeRC &environment) {
 	if(count_members(input) != 3) {
 		print_error("lambda", "missing arguments\n");
 
@@ -1045,44 +1054,64 @@ LispNodeRC eval_lambda(LispNodeRC input, LispNodeRC environment) {
 	return input;
 }
 
-LispNodeRC eval_lambda_application(LispNodeRC input, LispNodeRC environment) {
-	const LispNodeRC &lambda = input->head->item;
+LispNodeRC eval_closure(const LispNodeRC &input, const LispNodeRC &environment) {
+	return input;
+}
 
-	LispNodeRC output = eval_lambda(lambda, environment);
+LispNodeRC eval_macro(const LispNodeRC &input, const LispNodeRC &environment) {
+	return eval_procedure(input, environment);
+}
 
-	if(output == nullptr) {
+LispNodeRC eval_lambda(const LispNodeRC &input, const LispNodeRC &environment) {
+	if(eval_procedure(input, environment) == nullptr) {
 		return nullptr;
 	}
 
-	// Defines if we operate on macro substitution mode or in eager evaluation mode
-	bool lambda_subst = (get_operation_index(lambda->head->item->string) == OP_MACRO);
+	return make_cons(make_operator("closure"), make3(input, environment, list_empty));
+}
 
-	const LispNodeRC &lambda_argument1 = lambda->head->next->item;
-	const LispNodeRC &lambda_argument2 = lambda->head->next->next->item;
+LispNodeRC eval_lambda_application(LispNodeRC input, LispNodeRC environment) {
+	const LispNodeRC &procedure_or_closure = input->head->item;
+
+	int operator_index = get_operation_index(procedure_or_closure->head->item->string);
+
+	if(operator_index != OP_CLOSURE && operator_index != OP_LAMBDA && operator_index != OP_MACRO) {
+		return nullptr;
+	}
+
+	// Defines if we operate on macro substitution mode or in lambda/closure evaluation mode
+	bool lambda_subst = (operator_index == OP_MACRO);
+
+	const LispNodeRC &procedure = (operator_index == OP_CLOSURE ? procedure_or_closure->head->next->item : procedure_or_closure);
+
+	const LispNodeRC &procedure_parameters = procedure->head->next->item;
+	const LispNodeRC &procedure_expression = procedure->head->next->next->item;
 
 	// Evaluate the function by setting a new environment for the defined parameters
 
 	// Used when lambda_subst == #t:
-	//     Macro expansion: substitutes non-evaluated arguments into parameters in the original expression
-	LispNodeRC new_expression = lambda_argument2;
+	//     Macro expansion: substitutes non-evaluated parameters into arguments in the original expression
+	LispNodeRC new_expression = procedure_expression;
 	// Used when lambda_subst == #f:
-	//     Eager evaluation: creates a new environment bindin parameters to their eagerly-evaluated arguments
-	LispNodeRC new_environment = environment;
+	//     Eager evaluation: creates a new environment binding parameters to their eagerly-evaluated arguments
+	LispNodeRC new_environment = (operator_index == OP_CLOSURE ? procedure_or_closure->head->next->next->item : environment);
+
+	if(operator_index == OP_CLOSURE) {
+		const LispNodeRC &procedure_name = procedure_or_closure->head->next->next->next->item;
+
+		if(procedure_name != list_empty) {
+			new_environment = make_cons(make2(procedure_name, procedure), new_environment);
+		}
+	}
 
 	bool packed_dot = false;
 
-	Box *current_parameter_box = lambda_argument1->get_head_pointer();
+	Box *current_parameter_box = procedure_parameters->get_head_pointer();
 	Box *current_argument_box = input->get_head_pointer()->get_next_pointer();
 
 	while(current_parameter_box != nullptr || current_argument_box != nullptr) {
-		if(current_parameter_box == nullptr) {
-			print_error("lambda application", "missing arguments\n");
-
-			return nullptr;
-		}
-
-		if(current_argument_box == nullptr) {
-			print_error("lambda application", "missing arguments\n");
+		if(current_parameter_box == nullptr || current_argument_box == nullptr) {
+			print_error("lambda application", "missing or extra arguments\n");
 
 			return nullptr;
 		}
@@ -1123,8 +1152,7 @@ LispNodeRC eval_lambda_application(LispNodeRC input, LispNodeRC environment) {
 				current_argument_box = current_argument_box->get_next_pointer();
 			}
 
-			LispNodeRC quote = make_operator("quote");
-			LispNodeRC quote_list_rest = make2(quote, list_rest);
+			LispNodeRC quote_list_rest = make2(make_operator("quote"), list_rest);
 
 			argument = quote_list_rest;
 			packed_dot = true;
@@ -1149,7 +1177,7 @@ LispNodeRC eval_lambda_application(LispNodeRC input, LispNodeRC environment) {
 	}
 
 	// new_expession is only different from expression if macro substitution is done
-	// new_environment is only different from environment if normal lambda evaluation is done
+	// new_environment is only different from environment if lambda evaluation is done
 	return eval_expression(new_expression, new_environment);
 }
 
@@ -1244,7 +1272,7 @@ LispNodeRC eval_expression(LispNodeRC input, LispNodeRC environment) {
 		return input;
 	}
 
-	// Here you are certain that input->is_list()
+	// Input is a list...
 
 	if(input->head == nullptr) {
 		print_error("\'()", "cannot evaluate\n");
@@ -1330,31 +1358,36 @@ LispNodeRC eval_expression(LispNodeRC input, LispNodeRC environment) {
 			case OP_EVAL:
 				return eval_eval(input, environment);
 
-			case OP_LAMBDA:
 			case OP_MACRO:
+				return eval_macro(input, environment);
+
+			case OP_CLOSURE:
+				return eval_closure(input, environment);
+
+			case OP_LAMBDA:
 				return eval_lambda(input, environment);
 		}
-
-		// Evaluate the atom and try again
-		LispNodeRC other_first = eval_expression(first, environment);
-
-		if(other_first == nullptr) {
-			return nullptr;
-		}
-
-		// Change the input to point to the other lambda and evaluaute again
-		LispNodeRC parameters = make_cdr(input);
-		LispNodeRC other_input = make_cons(other_first, parameters);
-
-		return eval_expression(other_input, environment);
 	}
 
-	if(!first->is_list()) {
+	// Evaluate the first element and try again
+
+	LispNodeRC other_first = eval_expression(first, environment);
+
+	if(other_first == nullptr) {
 		return nullptr;
 	}
 
-	// Assume it is a lambda application, with function directly or indirectly specified
-	return eval_lambda_application(input, environment);
+	LispNodeRC other_input = make_cons(other_first, make_cdr(input));
+
+	if(other_first->is_atom() && other_first->is_pure() && get_operation_index(other_first->string) != -1) {
+		return eval_expression(other_input, environment);
+	}
+
+	if(other_first->is_list()) {
+		return eval_lambda_application(other_input, environment);
+	}
+
+	return nullptr;
 }
 
 void fill_initial_environment() {
@@ -1439,13 +1472,6 @@ int main(int argc, char **argv) {
 	}
 
 	fputs("\n", stdout);
-
-	// Frees allocated data from those pointers
-	atom_true = nullptr;
-	atom_false = nullptr;
-	list_empty = nullptr;
-
-	global_environment = nullptr;
 
 	return EXIT_SUCCESS;
 }

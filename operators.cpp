@@ -62,6 +62,7 @@ const char *operator_names[] = {
     "eval",
     "lambda",
     "macro",
+    "closure",
     "read",
     "write",
     "current-environment"
