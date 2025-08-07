@@ -2,24 +2,51 @@
 
 A portable LISP implementation for memory-constrained systems. It works from MOS 6502 to modern ARM/Intel 64-bit machines.
 
-## Project Goals
+## Project goals
 
-- Binary size smaller than 31.5K on MOS 6502, yet capable with modern architectures.
+- Binary size smaller than 31.5K on MOS 6502 (on a minimal build), yet capable with modern architectures.
 - Macro expansion support for syntatic sugar.
 - Depend on a minimal set of `libc` functions.
 - The code should be small and pedagogical, *easy to understand*.
 
+## Supported features
+
+We support a a good subset of the Scheme R7RS-small specification:
+
+- "McCarthy" operators: `quote`, `car`, `cdr`, `atom?`, `eq?`, `cons`, `cond`, `lambda`, `eval`, `define`
+- Association and substitution: `assoc`, `subst`
+- Type support:
+    - `pair?`, `char?`, `boolean?`, `string?`, `number?`, `integer?`, `real?`
+    - `integer->real`, `real->integer`, `integer->char`, `char->integer`, `number->string`, `string->number`
+- String operators: `string-length`, `string-append`, `string-ref`, `string-set!`, `make-string`, `substring`
+- Display support: `display`, `newline`
+- Arithmetic operators: `+`, `-`, `*`, `/`
+    - If you want an n-ary operator, use `apply` together with the operators above
+- Arithmetic comparison operators: `<`, `=`, `>`, `<=`, `>=`
+- Logical operators: `and`, `or`, `not`
+    - If you want an n-ary `and`/`or`, use `apply` together with `and`/`or`
+- Environment and macro support: `begin`, `set!`, `macro`, `read`, `write`, `current-environment`
+
+- If you build with `INITIAL_ENVIRONMENT=1` (of if you download the C64 release):
+  - Functional operators: `map`, `foldl`, `foldr`, `filter`
+  - List operations: `length`, `reverse`, `append`, `list`, `list?`
+  - Other arithmetic operators: `abs`, `modulo`
+  - String/list conversion: `list->string`, `string->list`
+  - Function application operator: `apply`
+  - Scope and control operators: `if`, `let`
+  
+Lambda definitions create *closures*, but we are do not have tail-recursion support **yet**.
+
 ## Notably missing features
 
-- Although a good subset of R7RS-small functions are covered, many are left out due to space (notably vectors and maps). It should be fairly straightfoward to extend the implementation to add them, but that would increase the footprint past our size goal of 31.5K.
+- Although a good subset of the Scheme R7RS-small specification are covered, many are left out due to space (notably vectors and maps). It should be fairly straightfoward to extend the implementation to add them, but that would increase the footprint past our size goal of 31.5K.
 
-## Getting started
+## Building
 
-If you are compiling **lispirito** in a modern system, just a simple `make clean; make install` should work.
+If you are building **lispirito** in a modern system, just a simple `make clean; make install` should work.
+To include debugging, use `make DEBUG=1` as your build command.
 
-To include debugging, add `-DDEBUG=1` to your build command.
-To include some standard lambdas and macros, add `-DINITIAL_ENVIROMENT=1` to your build command. Make sure you have heap memory for this! If you are on 6502 systems,
-you likely/unfortunately do not. In that case, you can either:
+If you are building for 6502 platforms, use `make clean; make TARGET_6502=1`. To include some standard lambdas and macros, use `make clean; make TARGET_6502=1 INITIAL_ENVIROMENT=1` as your build command. Make sure you have heap memory for this! If you do not, you can exclude the initial environment and:
 
 - Type the definitions you want in the REPL, maximally saving space; or
 - Edit the `lambdas.h` and `macros.h` files to include only the definitions you need.
