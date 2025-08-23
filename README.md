@@ -24,6 +24,7 @@ We support a a good subset of the Scheme R7RS-small specification:
 - Logical operators: `and`, `or`, `not`
     - If you want an n-ary `and`/`or`, use `apply` together with `and`/`or`
 - Environment and macro support: `begin`, `set!`, `macro`, `read`, `write`, `current-environment`
+- Low-level memory operations (C-style): `mem-alloc`, `mem-read`, `mem-write`, `mem-fill`, `mem-copy`, `mem-addr`
 
 - If you build with `INITIAL_ENVIRONMENT=1` (of if you download the "full" releases):
   - Functional operators: `map`, `foldl`, `foldr`, `filter`
