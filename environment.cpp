@@ -7,13 +7,11 @@
 
 int main(int argc, char **argv) {
 	for(int i = 0; i < NUMBER_INITIAL_LAMBDAS; i++) {
-        fputs(lambdas[i], stdout);
-        fputs("\n", stdout);
+        fprintf(stdout, "(define %s %s)\n", lambda_names[i], lambda_strings[i]);
     }
 
 	for(int i = 0; i < NUMBER_INITIAL_MACROS; i++) {
-        fputs(macros[i], stdout);
-        fputs("\n", stdout);
+        fprintf(stdout, "(define %s %s)\n", macro_names[i], macro_strings[i]);
     }
 
     return EXIT_SUCCESS;

@@ -1,7 +1,7 @@
 # For 6502
 
 ifeq ($(TARGET_6502), 1)
-CXX=../llvm-mos/bin/mos-hm6502-clang++
+CXX=../llvm-mos/bin/mos-c64-clang++
 else
 CXX=clang++
 endif
@@ -10,7 +10,7 @@ CFLAGS=-I.
 LDFLAGS=
 
 ifeq ($(TARGET_6502), 1)
-CFLAGS+= -DTARGET_6502=1 -DLISP_HEAP_SIZE=16384
+CFLAGS+= -DTARGET_6502=1 -DLISP_HEAP_SIZE=8192
 endif
 
 ifeq ($(TARGET_6502), 1)

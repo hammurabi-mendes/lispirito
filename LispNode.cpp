@@ -7,8 +7,8 @@ LispNode::LispNode(LispType type): type{type}, head{nullptr} {
 }
 
 LispNode::~LispNode() {
-	if(type == LispType::AtomPure || type == LispType::AtomBoolean || type == LispType::AtomString) {
-		free(string);
+	if(type == LispType::AtomPure || type == LispType::AtomBoolean || type == LispType::AtomString || type == LispType::AtomData) {
+		free(data);
 	}
 
 	if(type == LispType::List) {
@@ -25,7 +25,7 @@ bool LispNode::operator==(const LispNode &other) const {
 		case AtomPure:
 		case AtomBoolean:
 		case AtomString:
-			return (strcmp(string, other.string) == 0);
+			return (strcmp(data, other.data) == 0);
 		case AtomCharacter:
 		case AtomNumericIntegral:
 			return (number_i == other.number_i);
@@ -74,8 +74,12 @@ bool LispNode::is_numeric_real() const {
 	return (type == LispType::AtomNumericReal);
 }
 
+bool LispNode::is_data() const {
+	return (type == LispType::AtomData);
+}
+
 bool LispNode::is_operator(char *op) const {
-	return (is_list() && head->item != nullptr && head->item->is_atom() && strcmp(head->item->string, op) == 0);
+	return (is_list() && head.get_pointer() != nullptr && head->item != nullptr && head->item->is_pure() && strcmp(head->item->data, op) == 0);
 }
 
 void LispNode::op_arithmetic(int operation, LispNodeRC &first, LispNodeRC &second) {
@@ -190,11 +194,11 @@ void LispNode::print() const {
 	switch(type) {
 		case AtomPure:
 		case AtomBoolean:
-			fputs(string, stdout);
+			fputs(data, stdout);
 			break;
 		case AtomString:
 			fputs("\"", stdout);
-			fputs(string, stdout);
+			fputs(data, stdout);
 			fputs("\"", stdout);
 			break;
 		case AtomCharacter:
@@ -206,6 +210,11 @@ void LispNode::print() const {
 			break;
 		case AtomNumericReal:
 			print_real(number_r);
+			break;
+		case AtomData:
+			fputs("[data: ", stdout);
+			print_integral((size_t) data);
+			fputs("]", stdout);
 			break;
 		case List:
 			if(is_operator("closure")) {

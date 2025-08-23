@@ -23,6 +23,7 @@ enum LispType : unsigned char {
 	AtomCharacter,
 	AtomNumericIntegral,
 	AtomNumericReal,
+	AtomData,
 	List
 };
 
@@ -30,7 +31,7 @@ struct LispNode {
 	LispType type;
 
 	union {
-		char *string;
+		char *data;
 		Integral number_i;
 		Real number_r;
 		BoxRC head;
@@ -56,6 +57,7 @@ public:
 	bool is_numeric() const;
 	bool is_numeric_integral() const;
 	bool is_numeric_real() const;
+	bool is_data() const;
 
 	bool is_operator(char *op) const;
 

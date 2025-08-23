@@ -3,19 +3,23 @@
 
 constexpr int NUMBER_INITIAL_MACROS = 2;
 
-char *macros[] {
+char *macro_names[] {
+    "if",
+    "let"
+};
 
-"(define if (macro (test if_clause else_clause)"
+char *macro_strings[] {
+// if
+"(macro (test if_clause else_clause)"
 "    (cond ((test if_clause) (#t else_clause)))"
-"))",
-
-"(define let (macro (bindings expression)"
+")",
+// let
+"(macro (bindings expression)"
 "   (begin"
 "       (define new_env (foldr cons (current-environment) (quote bindings)))"
-"       (eval expression new_env)"
+"       (eval (quote expression) new_env)"
 "   )"
-"))"
-
+")"
 };
 
 #endif /* MACROS_H */

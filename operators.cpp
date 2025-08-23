@@ -26,12 +26,8 @@ const char *operator_names[] = {
     "char->integer",
     "number->string",
     "string->number",
-    "string-length",
-    "string-append",
-    "string-ref",
-    "string-set!",
-    "make-string",
-    "substring",
+    "string->data",
+    "data->string",
 
     // Display support
     "display",
@@ -65,5 +61,17 @@ const char *operator_names[] = {
     "closure",
     "read",
     "write",
-    "current-environment"
+    "current-environment",
+
+    // Low-level memory handling
+    "mem-alloc",
+    "mem-read",
+    "mem-write",
+    "mem-fill",
+    "mem-copy",
+    "mem-addr",
+
+    // Dynamic definition load/unload
+    "load",
+    "unload"
 };
