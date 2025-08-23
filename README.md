@@ -18,8 +18,6 @@ We support a a good subset of the Scheme R7RS-small specification:
 - Type support:
     - `pair?`, `char?`, `boolean?`, `string?`, `number?`, `integer?`, `real?`
     - `integer->real`, `real->integer`, `integer->char`, `char->integer`, `number->string`, `string->number`
-- String operators: `string-length`, `string-append`, `string-ref`, `string-set!`, `make-string`, `substring`
-- Display support: `display`, `newline`
 - Arithmetic operators: `+`, `-`, `*`, `/`
     - If you want an n-ary operator, use `apply` together with the operators above
 - Arithmetic comparison operators: `<`, `=`, `>`, `<=`, `>=`
@@ -27,11 +25,12 @@ We support a a good subset of the Scheme R7RS-small specification:
     - If you want an n-ary `and`/`or`, use `apply` together with `and`/`or`
 - Environment and macro support: `begin`, `set!`, `macro`, `read`, `write`, `current-environment`
 
-- If you build with `INITIAL_ENVIRONMENT=1` (of if you download the C64 release):
+- If you build with `INITIAL_ENVIRONMENT=1` (of if you download the "full" releases):
   - Functional operators: `map`, `foldl`, `foldr`, `filter`
   - List operations: `length`, `reverse`, `append`, `list`, `list?`
   - Other arithmetic operators: `abs`, `modulo`
-  - String/list conversion: `list->string`, `string->list`
+  - String support: `list->string`, `string->list`, `string-length`, `string-append`, `string-ref`, `string-set!`, `make-string`, `substring`
+- Display support: `display`, `newline`
   - Function application operator: `apply`
   - Scope and control operators: `if`, `let`
   
