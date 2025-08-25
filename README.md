@@ -26,12 +26,12 @@ We support a a good subset of the Scheme R7RS-small specification:
 - Environment and macro support: `begin`, `set!`, `macro`, `read`, `write`, `current-environment`
 - Low-level memory operations (C-style): `mem-alloc`, `mem-read`, `mem-write`, `mem-fill`, `mem-copy`, `mem-addr`
 
-- If you build with `INITIAL_ENVIRONMENT=1` (of if you download the "full" releases):
+If you compile with `INITIAL_ENVIRONMENT=1` (of if you download the "full" releases), you can use many of the expected functions like `map`, `filter` by loading them with `(load 'map)`, `(load 'filter)`, etc. Alternatively, you can **download the minimal release and type/paste the definitions of the functions in  [environment.lsp](environment.lsp).** All functions are still available in the minimal release, you just have to type/paste them from [environment.lsp](environment.lsp).
   - Functional operators: `map`, `foldl`, `foldr`, `filter`
   - List operations: `length`, `reverse`, `append`, `list`, `list?`
   - Other arithmetic operators: `abs`, `modulo`
   - String support: `list->string`, `string->list`, `string-length`, `string-append`, `string-ref`, `string-set!`, `make-string`, `substring`
-- Display support: `display`, `newline`
+  - Display support: `display`, `newline`
   - Function application operator: `apply`
   - Scope and control operators: `if`, `let`
   
