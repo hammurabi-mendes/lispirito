@@ -16,6 +16,38 @@ LispNode::~LispNode() {
 	}
 }
 
+LispNode *LispNode::make_data(LispType type, void *data) {
+	LispNode *result = new LispNode(type);
+
+	result->data = static_cast<char *>(data);
+
+	return result;
+}
+
+LispNode *LispNode::make_integer(Integral number_i) {
+	LispNode *result = new LispNode(LispType::AtomNumericIntegral);
+
+	result->number_i = number_i;
+
+	return result;
+}
+
+LispNode *LispNode::make_real(Integral number_r) {
+	LispNode *result = new LispNode(LispType::AtomNumericReal);
+
+	result->number_r = number_r;
+
+	return result;
+}
+
+LispNode *LispNode::make_list(Box *head) {
+	LispNode *result = new LispNode(LispType::List);
+
+	result->head = head;
+
+	return result;
+}
+
 bool LispNode::operator==(const LispNode &other) const {
 	if(type != other.type) {
 		return false;

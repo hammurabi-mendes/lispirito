@@ -73,5 +73,17 @@ const char *operator_names[] = {
 
     // Dynamic definition load/unload
     "load",
-    "unload"
+    "unload",
+
+    // VM operators
+    "vm-first",
+    "vm-normal",
+    "vm-call",
+    "vm-cond",
+    "vm-logic",
+    "vm-define",
+    "vm-begin",
+    "vm-apply",
+    "vm-eval-list",
+    "vm-eval"
 };

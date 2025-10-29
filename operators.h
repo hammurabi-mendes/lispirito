@@ -68,9 +68,20 @@ enum LispOperation {
     OP_MEM_ADDR,
 
     OP_LOAD,
-    OP_UNLOAD
+    OP_UNLOAD,
+
+    OP_VM_FIRST,
+    OP_VM_NORMAL,
+    OP_VM_CALL,
+    OP_VM_COND,
+    OP_VM_LOGIC,
+    OP_VM_DEFINE,
+    OP_VM_BEGIN,
+    OP_VM_APPLY,
+    OP_VM_EVAL_LIST,
+    OP_VM_EVAL
 };
 
-constexpr int NUMBER_BASIC_OPERATORS = OP_UNLOAD + 1;
+constexpr int NUMBER_BASIC_OPERATORS = OP_VM_EVAL + 1;
 
 #endif /* OPERATORS_H */

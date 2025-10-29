@@ -41,6 +41,11 @@ public:
 	LispNode(LispType type);
 	~LispNode();
 
+	static LispNode *make_data(LispType type, void *data);
+	static LispNode *make_integer(Integral number_i);
+	static LispNode *make_real(Integral number_i);
+	static LispNode *make_list(Box *head = nullptr);
+
 	Box *get_head_pointer() const {
 		return head.get_pointer();
 	}
