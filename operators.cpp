@@ -78,12 +78,14 @@ const char *operator_names[] = {
     // VM operators
     "vm-first",
     "vm-normal",
-    "vm-call",
+    "vm-quote",
     "vm-cond",
     "vm-logic",
     "vm-define",
     "vm-begin",
     "vm-apply",
-    "vm-eval-list",
-    "vm-eval"
+    "vm-eval",
+    "vm-load",
+    "vm-call",
+    "vm-eval-list"
 };

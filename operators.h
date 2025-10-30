@@ -72,16 +72,18 @@ enum LispOperation {
 
     OP_VM_FIRST,
     OP_VM_NORMAL,
-    OP_VM_CALL,
+    OP_VM_QUOTE,
     OP_VM_COND,
     OP_VM_LOGIC,
     OP_VM_DEFINE,
     OP_VM_BEGIN,
     OP_VM_APPLY,
-    OP_VM_EVAL_LIST,
-    OP_VM_EVAL
+    OP_VM_EVAL,
+    OP_VM_LOAD,
+    OP_VM_CALL,
+    OP_VM_EVAL_LIST
 };
 
-constexpr int NUMBER_BASIC_OPERATORS = OP_VM_EVAL + 1;
+constexpr int NUMBER_BASIC_OPERATORS = OP_VM_EVAL_LIST + 1;
 
 #endif /* OPERATORS_H */

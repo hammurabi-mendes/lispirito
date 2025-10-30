@@ -1,7 +1,7 @@
 #ifndef LAMBDAS_H
 #define LAMBDAS_H
 
-constexpr int NUMBER_INITIAL_LAMBDAS = 20;
+constexpr int NUMBER_INITIAL_LAMBDAS = 23;
 
 char *lambda_names[] {
     "map",
@@ -23,38 +23,41 @@ char *lambda_names[] {
     "make-string",
     "string-length",
     "string-append",
-    "substring"
+    "substring",
+    "pair",
+    "assoc-replace",
+    "assoc-delete"
 };
 
 char *lambda_strings[] {
 // map
 "(lambda (func list)"
-"    (cond ("
+"    (cond"
 "        ((eq? list '()) '())"
 "        (#t (cons (func (car list)) (map func (cdr list))))"
-"    ))"
+"    )"
 ")",
 // foldl
 "(lambda (binfunc acc list)"
-"    (cond ("
+"    (cond"
 "        ((eq? list '()) acc)"
 "        (#t (foldl binfunc (binfunc (car list) acc) (cdr list)))"
-"    ))"
+"    )"
 ")",
 // foldr
 "(lambda (binfunc acc list)"
-"    (cond ("
+"    (cond"
 "        ((eq? list '()) acc)"
 "        (#t (binfunc (car list) (foldr binfunc acc (cdr list))))"
-"    ))"
+"    )"
 ")",
 // filter
 "(lambda (pred list)"
-"    (cond ("
+"    (cond"
 "        ((eq? list '()) '())"
 "        ((pred (car list)) (cons (car list) (filter pred (cdr list))))"
 "        (#t (filter pred (cdr list)))"
-"    ))"
+"    )"
 ")",
 // length
 "(lambda (l) (foldl (lambda (first acc) (+ 1 acc)) 0 l))",
@@ -66,11 +69,11 @@ char *lambda_strings[] {
 "(lambda (. items) (foldl cons '() items))",
 // list?
 "(lambda (input)"
-"    (cond ("
+"    (cond"
 "        ((atom? input) #f)"
 "        ((eq? input '()) #t)"
 "        (#t (list? (cdr input)))"
-"    ))"
+"    )"
 ")",
 // abs
 "(lambda (x) (if (> x 0) x (neg x)))",
@@ -82,10 +85,10 @@ char *lambda_strings[] {
 ")",
 // string->list
 "(lambda (str)"
-"    (cond ("
+"    (cond"
 "        ((eq? str \"\") '())"
 "        (#t (cons (string-ref str 0) (string->list (substring str 1 (string-length str)))))"
-"    ))"
+"    )"
 ")",
 // apply
 "(lambda (op . list) (foldl op (car list) (cdr list)))",
@@ -109,10 +112,10 @@ char *lambda_strings[] {
 "(lambda (input)"
 "    (begin"
 "        (define (helper str cur)"
-"            (cond ("
+"            (cond"
 "                ((eq? (mem-read (+ (mem-addr str) cur)) (integer->char 0)) 0)"
 "                (#t (+ 1 (helper str (+ cur 1))))"
-"            ))"
+"            )"
 "        )"
 "        (helper input 0)"
 "    )"
@@ -136,6 +139,16 @@ char *lambda_strings[] {
 "        (mem-copy (mem-addr result) (+ (mem-addr str) start) size)"
 "        result"
 "    )"
+")",
+// pair
+"(lambda (a b) (cons a (cons b '())))",
+// assoc-replace
+"(lambda (key nval lst)"
+"    (foldr (lambda (cur acc) (if (eq? (car cur) key) (cons (pair key nval) acc) (cons cur acc))) '() lst)"
+")",
+// assoc-delete
+"(lambda (key nval lst)"
+"    (foldr (lambda (cur acc) (if (eq? (car cur) key) acc (cons cur acc))) '() lst)"
 ")"
 };
 
