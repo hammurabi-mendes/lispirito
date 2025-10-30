@@ -891,18 +891,14 @@ LispNodeRC make_define(const LispNodeRC &operation, const LispNodeRC &symbol, co
 }
 
 LispNodeRC make_lambda_application(const LispNodeRC &input, const LispNodeRC &environment) {
-	const LispNodeRC &procedure_or_closure = input->head->item;
+	const LispNodeRC &closure_or_macro = input->head->item;
 
-	int operator_index = get_operation_index(procedure_or_closure->head->item->data);
-
-	if(operator_index != OP_CLOSURE && operator_index != OP_LAMBDA && operator_index != OP_MACRO) {
-		return nullptr;
-	}
+	int operator_index = get_operation_index(closure_or_macro->head->item->data);
 
 	// Defines if we operate on macro substitution mode or in lambda/closure evaluation mode
 	bool lambda_subst = (operator_index == OP_MACRO);
 
-	const LispNodeRC &procedure = (operator_index == OP_CLOSURE ? procedure_or_closure->head->next->item : procedure_or_closure);
+	const LispNodeRC &procedure = (operator_index == OP_CLOSURE ? closure_or_macro->head->next->item : closure_or_macro);
 
 	const LispNodeRC &procedure_parameters = procedure->head->next->item;
 
@@ -913,10 +909,10 @@ LispNodeRC make_lambda_application(const LispNodeRC &input, const LispNodeRC &en
 	LispNodeRC new_expression = LispNode::make_list(procedure->get_head_pointer()->get_next_pointer()->get_next_pointer());
 	// Used when lambda_subst == #f:
 	//     Eager evaluation: creates a new environment binding parameters to their eagerly-evaluated arguments
-	LispNodeRC new_environment = (operator_index == OP_CLOSURE ? procedure_or_closure->head->next->next->item : environment);
+	LispNodeRC new_environment = (operator_index == OP_CLOSURE ? closure_or_macro->head->next->next->item : environment);
 
 	if(operator_index == OP_CLOSURE) {
-		const LispNodeRC &procedure_name = procedure_or_closure->head->next->next->next->item;
+		const LispNodeRC &procedure_name = closure_or_macro->head->next->next->next->item;
 
 		if(procedure_name != list_empty) {
 			new_environment = make_cons(make2(procedure_name, procedure), new_environment);
@@ -1229,7 +1225,6 @@ void vm_step() {
 				LispNodeRC result = data_pop();
 
 				evaluation_stack = make_cdr(evaluation_stack);
-
 				vm_push(make3(make_operator("vm-eval"), list_empty, make2(make_cons(result, make_cdr(input)), environment)));
 			}
 
@@ -1262,10 +1257,10 @@ void vm_step() {
 				return;
 			}
 
-			const LispNodeRC &argument = input->head->next->item;
+			const LispNodeRC &quoted_expression = input->head->next->item;
 
 			evaluation_stack = make_cdr(evaluation_stack);
-			data_push(argument);
+			data_push(quoted_expression);
 
 			return;
 		}
@@ -1278,7 +1273,6 @@ void vm_step() {
 
 			if(waiting == atom_false && evaluation_pairs == list_empty) {
 				evaluation_stack = make_cdr(evaluation_stack);
-
 				data_push(list_empty);
 
 				return;
