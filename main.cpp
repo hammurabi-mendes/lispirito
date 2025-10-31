@@ -882,9 +882,9 @@ LispNodeRC make_define(const LispNodeRC &operation, const LispNodeRC &symbol, co
 
 	// Make closures' environments to include their own definition (for recursion)
 	if(value->is_operator("closure")) {
-		LispNodeRC &procedure_name = value->head->next->next->next->item;
+		LispNodeRC &closure_name = value->head->next->next->next->item;
 
-		procedure_name = symbol;
+		closure_name = symbol;
 	}
 
 	return *context_environment;
@@ -912,10 +912,10 @@ LispNodeRC make_lambda_application(const LispNodeRC &input, const LispNodeRC &en
 	LispNodeRC new_environment = (operator_index == OP_CLOSURE ? closure_or_macro->head->next->next->item : environment);
 
 	if(operator_index == OP_CLOSURE) {
-		const LispNodeRC &procedure_name = closure_or_macro->head->next->next->next->item;
+		const LispNodeRC &closure_name = closure_or_macro->head->next->next->next->item;
 
-		if(procedure_name != list_empty) {
-			new_environment = make_cons(make2(procedure_name, procedure), new_environment);
+		if(closure_name != list_empty) {
+			new_environment = make_cons(make2(closure_name, closure_or_macro), new_environment);
 		}
 	}
 
@@ -1014,13 +1014,14 @@ LispNodeRC data_pop() {
 	return result;
 }
 
+// I want to differentiate reset and finish, but for now they work the same way
+#define vm_finish vm_reset
+
 void vm_reset() {
 	evaluation_stack = list_empty;
 	data_stack = list_empty;
-}
 
-void vm_finish() {
-	evaluation_stack = list_empty;
+	context_environment = &global_environment;
 }
 
 void eval_reduce(const LispNodeRC &input, const LispNodeRC &environment) {
@@ -1375,13 +1376,20 @@ void vm_step() {
 				const LispNodeRC &operation = input->head->item;
 				const LispNodeRC &symbol = input->head->next->item;
 
-				LispNodeRC result = data_pop();
+				LispNodeRC evaluated_symbol = data_pop();
+				LispNodeRC result;
 
 				if(symbol->is_list()) {
-					make_define(operation, symbol->head->item, result);
+					result = make_define(operation, symbol->head->item, evaluated_symbol);
 				}
 				else {
-					make_define(operation, symbol, result);
+					result = make_define(operation, symbol, evaluated_symbol);
+				}
+
+				if(result == nullptr) {
+					// Error message printed in the make_define() function
+					vm_finish();
+					return;
 				}
 
 				evaluation_stack = make_cdr(evaluation_stack);
@@ -1392,17 +1400,20 @@ void vm_step() {
 		}
 		// (vm-begin (<old_environment> <waiting>) (evaluation_items environment))
 		case OP_VM_BEGIN: {
-			const LispNodeRC &old_environment = vm_op_state->head->item;
+			LispNodeRC &old_environment = vm_op_state->head->item;
 			LispNodeRC &waiting = vm_op_state->head->next->item;
 
 			if(waiting == atom_false) {
-				*context_environment = environment;
+				// Get a non-const reference to the new environment
+				LispNodeRC &new_environment = vm_op_arguments->head->next->item;
 
-				vm_push(make3(make_operator("vm-eval-list"), make2(atom_false, atom_false), vm_op_arguments));
+				context_environment = &new_environment;
+
+				vm_push(make3(make_operator("vm-eval-list"), make2(atom_true, atom_false), vm_op_arguments));
 				waiting = atom_true;
 			}
 			else {
-				*context_environment = old_environment;
+				context_environment = &old_environment;
 
 				evaluation_stack = make_cdr(evaluation_stack);
 			}
@@ -1429,6 +1440,12 @@ void vm_step() {
 				evaluated_input = make_cons(input->head->item, evaluated_input);
 
 				LispNodeRC lambda_application = make_lambda_application(evaluated_input, environment);
+
+				if(lambda_application == nullptr) {
+					// Error message printed in the make_lambda_application() function
+					vm_finish();
+					return;
+				}
 
 				const LispNodeRC &new_expression = lambda_application->head->item;
 				const LispNodeRC &new_environment = lambda_application->head->next->item;
@@ -1624,7 +1641,6 @@ int main(int argc, char **argv) {
 		}
 
 		LispNodeRC output;
-		context_environment = &global_environment;
 		
 		if((output = eval_expression(input, global_environment)) == nullptr) {
 			fputs("Error evaluating expression\n", stdout);

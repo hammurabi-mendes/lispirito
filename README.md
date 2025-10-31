@@ -35,11 +35,11 @@ If you compile with `INITIAL_ENVIRONMENT=1` (of if you download the "full" relea
   - Function application operator: `apply`
   - Scope and control operators: `if`, `let`
   
-Lambda definitions create *closures*, but we are do not have tail-recursion support **yet**.
+Lambda definitions create *closures*, but we do not have tail-recursion support **yet**.
 
 ## Notably missing features
 
-- Although a good subset of the Scheme R7RS-small specification are covered, many are left out due to space (notably vectors and maps). It should be fairly straightfoward to extend the implementation to add them, but that would increase the footprint past our size goal of 31.5K.
+- Although a good subset of the Scheme R7RS-small specification is covered, many operators or data structures are left out due to space (notably vectors and maps). It should be fairly straightfoward to extend the implementation to add them, but that would increase the footprint past our size goal of 31.5K.
 
 ## Building
 
