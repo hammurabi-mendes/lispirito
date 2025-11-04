@@ -946,10 +946,7 @@ LispNodeRC make_lambda_application(const LispNodeRC &input, const LispNodeRC &en
 			current_parameter_box = current_parameter_box->get_next_pointer();
 			parameter = current_parameter_box->item;
 			
-			LispNodeRC list_rest = LispNode::make_list(current_argument_box);
-			LispNodeRC quote_list_rest = make2(make_operator("quote"), list_rest);
-
-			argument = quote_list_rest;
+			argument = LispNode::make_list(current_argument_box);
 			packed_dot = true;
 		}
 
@@ -1154,7 +1151,7 @@ void eval_reduce(const LispNodeRC &input, const LispNodeRC &environment) {
 
 			case OP_BEGIN:
 				// Special:
-				vm_push(make3(make_operator("vm-begin"), make2(environment, atom_false), make2(make_cdr(input), make_environment())));
+				vm_push(make3(make_operator("vm-begin"), make2(list_empty, atom_false), make2(make_cdr(input), make_environment())));
 				return;
 
 			case OP_DEFINE:
@@ -1189,13 +1186,16 @@ void eval_reduce(const LispNodeRC &input, const LispNodeRC &environment) {
 		vm_push(make3(make_operator("vm-apply"), make2(LispNode::make_integer(count_members(input) - 1), atom_false), make2(input, environment)));
 		return;
 	}
-	else {
+
+	if(first->is_atom() && first->is_pure()) {
 		vm_push(make3(make_operator("vm-first"), atom_false, make2(input, environment)));
 		return;
 	}
 
-	print_error("eval_reduce()", "unknown form");
 	input->print();
+	print_error("at eval_reduce()", "unknown form");
+	vm_finish();
+
 	return;
 }
 
@@ -1363,6 +1363,12 @@ void vm_step() {
 			const LispNodeRC &symbol = input->head->next->item;
 
 			if(waiting == atom_false) {
+				if(count_members(input) != 3) {
+					print_error(input->head->item->data, "missing arguments\n");
+					vm_finish();
+
+					return;
+				}
 				LispNodeRC expression = input->head->next->next->item;
 
 				if(symbol->is_list()) {
@@ -1398,22 +1404,24 @@ void vm_step() {
 
 			return;
 		}
-		// (vm-begin (<old_environment> <waiting>) (evaluation_items environment))
+		// (vm-begin (<saved_context_environment> <waiting>) (evaluation_items environment))
 		case OP_VM_BEGIN: {
-			LispNodeRC &old_environment = vm_op_state->head->item;
+			LispNodeRC &saved_context_environment = vm_op_state->head->item;
 			LispNodeRC &waiting = vm_op_state->head->next->item;
 
 			if(waiting == atom_false) {
 				// Get a non-const reference to the new environment
 				LispNodeRC &new_environment = vm_op_arguments->head->next->item;
 
+				saved_context_environment = LispNode::make_data(LispType::AtomData, context_environment);
 				context_environment = &new_environment;
 
 				vm_push(make3(make_operator("vm-eval-list"), make2(atom_true, atom_false), vm_op_arguments));
 				waiting = atom_true;
 			}
 			else {
-				context_environment = &old_environment;
+				context_environment = reinterpret_cast<LispNodeRC *>(saved_context_environment->data);
+				saved_context_environment->data = nullptr;
 
 				evaluation_stack = make_cdr(evaluation_stack);
 			}
@@ -1451,7 +1459,7 @@ void vm_step() {
 				const LispNodeRC &new_environment = lambda_application->head->next->item;
 
 				evaluation_stack = make_cdr(evaluation_stack);
-				vm_push(make3(make_operator("vm-begin"), make2(environment, atom_false), make2(new_expression, new_environment)));
+				vm_push(make3(make_operator("vm-begin"), make2(list_empty, atom_false), make2(new_expression, new_environment)));
 			}
 
 			return;
@@ -1469,6 +1477,13 @@ void vm_step() {
 			LispNodeRC &waiting = vm_op_state->head->next->item;
 
 			if(waiting == atom_false) {
+				if(count_members(input) != 3) {
+					print_error(input->head->item->data, "missing arguments\n");
+					vm_finish();
+
+					return;
+				}
+
 				const LispNodeRC &symbol = input->head->next->item;
 
 				vm_push(make3(make_operator("vm-eval"), list_empty, make2(symbol, environment)));
@@ -1577,8 +1592,11 @@ void vm_step() {
 			return;
 		}
 		default:
-			print_error("vm_step()", "unknown operation");
+			top->print();
+			print_error("at vm_step()", "unknown operation");
 			vm_finish();
+
+			return;
 	}
 }
 

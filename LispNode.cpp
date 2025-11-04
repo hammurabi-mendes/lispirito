@@ -8,7 +8,9 @@ LispNode::LispNode(LispType type): type{type}, head{nullptr} {
 
 LispNode::~LispNode() {
 	if(type == LispType::AtomPure || type == LispType::AtomBoolean || type == LispType::AtomString || type == LispType::AtomData) {
-		free(data);
+		if(data != nullptr) {
+			free(data);
+		}
 	}
 
 	if(type == LispType::List) {
