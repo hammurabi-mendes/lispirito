@@ -4,6 +4,7 @@
 constexpr int NUMBER_INITIAL_LAMBDAS = 23;
 
 char *lambda_names[] {
+    "nil?",
     "map",
     "foldl",
     "foldr",
@@ -12,6 +13,7 @@ char *lambda_names[] {
     "reverse",
     "append",
     "list",
+    "flatten",
     "list?",
     "abs",
     "modulo",
@@ -30,33 +32,35 @@ char *lambda_names[] {
 };
 
 char *lambda_strings[] {
+// nil?
+"(lambda (param) (eq? param '()))",
 // map
-"(lambda (func list)"
+"(lambda (func lst)"
 "    (cond"
-"        ((eq? list '()) '())"
-"        (#t (cons (func (car list)) (map func (cdr list))))"
+"        ((nil? lst) '())"
+"        (#t (cons (func (car lst)) (map func (cdr lst))))"
 "    )"
 ")",
 // foldl
-"(lambda (binfunc acc list)"
+"(lambda (binfunc acc lst)"
 "    (cond"
-"        ((eq? list '()) acc)"
-"        (#t (foldl binfunc (binfunc (car list) acc) (cdr list)))"
+"        ((eq? lst '()) acc)"
+"        (#t (foldl binfunc (binfunc (car lst) acc) (cdr lst)))"
 "    )"
 ")",
 // foldr
-"(lambda (binfunc acc list)"
+"(lambda (binfunc acc lst)"
 "    (cond"
-"        ((eq? list '()) acc)"
-"        (#t (binfunc (car list) (foldr binfunc acc (cdr list))))"
+"        ((eq? lst '()) acc)"
+"        (#t (binfunc (car lst) (foldr binfunc acc (cdr lst))))"
 "    )"
 ")",
 // filter
-"(lambda (pred list)"
+"(lambda (pred lst)"
 "    (cond"
-"        ((eq? list '()) '())"
-"        ((pred (car list)) (cons (car list) (filter pred (cdr list))))"
-"        (#t (filter pred (cdr list)))"
+"        ((eq? lst '()) '())"
+"        ((pred (car lst)) (cons (car lst) (filter pred (cdr lst))))"
+"        (#t (filter pred (cdr lst)))"
 "    )"
 ")",
 // length
@@ -67,6 +71,14 @@ char *lambda_strings[] {
 "(lambda (l1 l2) (foldr cons l2 l1))",
 // list
 "(lambda (. items) (foldl cons '() items))",
+// flatten
+"(lambda (lst)"
+"    (cond"
+"        ((eq? lst '()) '())"
+"        ((atom? (car lst)) (cons (car lst) (flatten (cdr lst))))"
+"        (#t (append (flatten (car lst)) (flatten (cdr lst))))"
+"    )"
+")",
 // list?
 "(lambda (input)"
 "    (cond"
@@ -80,8 +92,8 @@ char *lambda_strings[] {
 // modulo
 "(lambda (x m) (- x (* (/ x m) m)))",
 // list->string
-"(lambda (list)"
-"    (foldl (lambda (first acc) (string-append (make-string 1 first) acc)) \"\" (reverse list))"
+"(lambda (lst)"
+"    (foldl (lambda (first acc) (string-append (make-string 1 first) acc)) \"\" (reverse lst))"
 ")",
 // string->list
 "(lambda (str)"
@@ -91,7 +103,10 @@ char *lambda_strings[] {
 "    )"
 ")",
 // apply
-"(lambda (op . list) (foldl op (car list) (cdr list)))",
+"(lambda (op . list)"
+"    (define args (flatten list))"
+"    (foldl op (car args) (cdr args))"
+")",
 // "string-ref"
 "(lambda (str pos)"
 "    (mem-read (+ (mem-addr str) pos))"

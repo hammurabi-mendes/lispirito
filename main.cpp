@@ -88,14 +88,14 @@ int string_index(const char *query, const char **list, int maximum) {
 // Make operators
 
 LispNodeRC make_operator(char *operator_name) {
-	LispNodeRC result = new LispNode(LispType::AtomPure);
+	LispNode *result = new LispNode(LispType::AtomPure);
 	result->data = strdup(operator_name);
 
 	return result;
 }
 
 LispNodeRC make1(const LispNodeRC &first) {
-	LispNodeRC result = new LispNode(LispType::List);
+	LispNode *result = new LispNode(LispType::List);
 
 	result->head = new Box(first);
 
@@ -103,7 +103,7 @@ LispNodeRC make1(const LispNodeRC &first) {
 }
 
 LispNodeRC make2(const LispNodeRC &first, const LispNodeRC &second) {
-	LispNodeRC result = new LispNode(LispType::List);
+	LispNode *result = new LispNode(LispType::List);
 
 	result->head = new Box(first);
 	result->head->next = new Box(second);
@@ -112,7 +112,7 @@ LispNodeRC make2(const LispNodeRC &first, const LispNodeRC &second) {
 }
 
 LispNodeRC make3(const LispNodeRC &first, const LispNodeRC &second, const LispNodeRC &third) {
-	LispNodeRC result = new LispNode(LispType::List);
+	LispNode *result = new LispNode(LispType::List);
 
 	result->head = new Box(first);
 	result->head->next = new Box(second);
@@ -122,7 +122,7 @@ LispNodeRC make3(const LispNodeRC &first, const LispNodeRC &second, const LispNo
 }
 
 LispNodeRC make_cons(const LispNodeRC &first, const LispNodeRC &second) {
-	LispNodeRC result = new LispNode(LispType::List);
+	LispNode *result = new LispNode(LispType::List);
 
 	result->head = new Box(first);
 
@@ -137,18 +137,25 @@ LispNodeRC make_cons(const LispNodeRC &first, const LispNodeRC &second) {
 }
 
 LispNodeRC make_car(const LispNodeRC &list) {
+	if(!list->is_list() || list->head == nullptr) {
+		return nullptr;
+	}
+
 	return list->head->item;
 }
 
 LispNodeRC make_cdr(const LispNodeRC &list) {
-	const BoxRC &second_element_box = list->head->next;
+	if(!list->is_list() || list->head == nullptr) {
+		return nullptr;
+	}
+
+	Box *second_element_box = list->get_head_pointer()->get_next_pointer();
 
 	if(second_element_box == nullptr) {
 		return list_empty;
 	}
 
-	LispNodeRC result = new LispNode(LispType::List);
-	result->head = second_element_box;
+	LispNode *result = LispNode::make_list(second_element_box);
 
 	return result;
 }
@@ -179,7 +186,7 @@ LispNodeRC make_substitution(const LispNodeRC &old_symbol, const LispNodeRC &new
 		return (expression == old_symbol) ? new_symbol : expression;
 	}
 
-	LispNodeRC output = new LispNode(LispType::List);
+	LispNode *output = new LispNode(LispType::List);
 
 	Box *last_box = nullptr;
 
@@ -509,10 +516,11 @@ LispNodeRC eval_gen0(const LispNodeRC &input, const LispNodeRC &environment) {
 
 			return parse_expression(input_string);
 		}
-    	case OP_NEWLINE:
+    	case OP_NEWLINE: {
 			fputs("\n", stdout);
 
 			return list_empty;
+		}
 		case OP_CURRENT_ENVIRONMENT:
 			return environment;
 		default:
@@ -530,14 +538,6 @@ LispNodeRC eval_gen1(const LispNodeRC &input, const LispNodeRC &environment) {
 
 	int operation_index = get_operation_index(operator_name->data);
 	LispNode *result = nullptr;
-
-	if(operation_index == OP_CAR || operation_index == OP_CDR) {
-		if(!output1->is_list() || output1->head == nullptr) {
-			print_error("car/cdr", "argument type error\n");
-
-			return nullptr;
-		}
-	}
 
 	switch(operation_index) {
 		case OP_CAR:
@@ -562,8 +562,6 @@ LispNodeRC eval_gen1(const LispNodeRC &input, const LispNodeRC &environment) {
 			return output1->is_numeric_real() ? atom_true : atom_false;
 		case OP_INTEGER_REAL:
 			if(!output1->is_numeric_integral()) {
-				print_error("integer->real", "argument type error\n");
-
 				return nullptr;
 			}
 
@@ -573,8 +571,6 @@ LispNodeRC eval_gen1(const LispNodeRC &input, const LispNodeRC &environment) {
 			break;
 		case OP_REAL_INTEGER:
 			if(!output1->is_numeric_real()) {
-				print_error("real->integer", "argument type error\n");
-
 				return nullptr;
 			}
 
@@ -588,16 +584,12 @@ LispNodeRC eval_gen1(const LispNodeRC &input, const LispNodeRC &environment) {
 			break;
 		case OP_NOT:
 			if(!output1->is_boolean()) {
-				print_error("not", "argument type error\n");
-
 				return nullptr;
 			}
 
 			return (output1 == atom_true ? atom_false : atom_true);
 		case OP_INTEGER_CHAR:
 			if(!output1->is_numeric_integral()) {
-				print_error("integer->char", "argument type error\n");
-
 				return nullptr;
 			}
 
@@ -607,8 +599,6 @@ LispNodeRC eval_gen1(const LispNodeRC &input, const LispNodeRC &environment) {
 			break;
     	case OP_CHAR_INTEGER:
 			if(!output1->is_character()) {
-				print_error("char->integer", "argument type error\n");
-
 				return nullptr;
 			}
 
@@ -618,8 +608,6 @@ LispNodeRC eval_gen1(const LispNodeRC &input, const LispNodeRC &environment) {
 			break;
     	case OP_NUMBER_STRING: {
 			if(!output1->is_numeric()) {
-				print_error("number->string", "argument type error\n");
-
 				return nullptr;
 			}
 
@@ -641,24 +629,18 @@ LispNodeRC eval_gen1(const LispNodeRC &input, const LispNodeRC &environment) {
 		}
     	case OP_STRING_NUMBER:
 			if(!output1->is_string()) {
-				print_error("string->number", "argument type error\n");
-
 				return nullptr;
 			}
 
 			result = parse_atom(output1->data).get_pointer();
 
 			if(result == nullptr || !result->is_numeric()) {
-				print_error("string->number", "argument type error\n");
-
 				return nullptr;
 			}
 
 			break;
 		case OP_STRING_DATA: {
 			if(!output1->is_string()) {
-				print_error("string->data", "argument type error\n");
-
 				return nullptr;
 			}
 
@@ -668,8 +650,6 @@ LispNodeRC eval_gen1(const LispNodeRC &input, const LispNodeRC &environment) {
 		}
 		case OP_DATA_STRING: {
 			if(!output1->is_data()) {
-				print_error("data->string", "argument type error\n");
-
 				return nullptr;
 			}
 
@@ -715,8 +695,6 @@ LispNodeRC eval_gen2(LispNodeRC &input, const LispNodeRC &environment) {
 
 	if(operation_index >= OP_PLUS && operation_index <= OP_BIGGER_EQUAL) {
 		if(!output1->is_numeric() || !output2->is_numeric()) {
-			print_error(operator_name->data, "argument type error\n");
-
 			return nullptr;
 		}
 
@@ -979,36 +957,28 @@ LispNodeRC make_environment() {
 
 // VM functions
 
-void vm_push(const LispNodeRC &node) {
+inline void vm_push(const LispNodeRC &node) {
     evaluation_stack = make_cons(node, evaluation_stack);
 }
 
-const LispNodeRC &vm_peek() {
-	if(evaluation_stack != list_empty) {
-		return evaluation_stack->head->item;
-	}
-
-	return list_empty;
+inline const LispNodeRC &vm_peek() {
+	return evaluation_stack->head->item;
 }
 
-void data_push(const LispNodeRC &node) {
+inline void vm_pop() {
+	evaluation_stack = make_cdr(evaluation_stack);
+}
+
+inline void data_push(const LispNodeRC &node) {
     data_stack = make_cons(node, data_stack);
 }
 
-LispNodeRC &data_peek() {
-	if(data_stack != list_empty) {
-		return data_stack->head->item;
-	}
-
-	return list_empty;
+inline LispNodeRC &data_peek() {
+	return data_stack->head->item;
 }
 
-LispNodeRC data_pop() {
-	LispNodeRC result = data_peek();
-
+inline void data_pop() {
     data_stack = make_cdr(data_stack);
-
-	return result;
 }
 
 // I want to differentiate reset and finish, but for now they work the same way
@@ -1223,9 +1193,10 @@ void vm_step() {
 				waiting = atom_true;
 			}
 			else {
-				LispNodeRC result = data_pop();
+				LispNodeRC result = data_peek();
+				data_pop();
 
-				evaluation_stack = make_cdr(evaluation_stack);
+				vm_pop();
 				vm_push(make3(make_operator("vm-eval"), list_empty, make2(make_cons(result, make_cdr(input)), environment)));
 			}
 
@@ -1242,7 +1213,7 @@ void vm_step() {
 				return;
 			}
 
-			evaluation_stack = make_cdr(evaluation_stack);
+			vm_pop();
 
 			vm_push(make3(make_operator("vm-call"), vm_op_state, vm_op_arguments));
 			vm_push(make3(make_operator("vm-eval-list"), make2(atom_false, atom_false), make2(make_cdr(input), environment)));
@@ -1260,7 +1231,7 @@ void vm_step() {
 
 			const LispNodeRC &quoted_expression = input->head->next->item;
 
-			evaluation_stack = make_cdr(evaluation_stack);
+			vm_pop();
 			data_push(quoted_expression);
 
 			return;
@@ -1273,7 +1244,7 @@ void vm_step() {
 			const LispNodeRC &environment = vm_op_arguments->head->next->item;
 
 			if(waiting == atom_false && evaluation_pairs == list_empty) {
-				evaluation_stack = make_cdr(evaluation_stack);
+				vm_pop();
 				data_push(list_empty);
 
 				return;
@@ -1289,10 +1260,11 @@ void vm_step() {
 				vm_op_state = atom_true;
 			}
 			else {
-				LispNodeRC result = data_pop();
+				LispNodeRC result = data_peek();
+				data_pop();
 
 				if(result == atom_true) {
-					evaluation_stack = make_cdr(evaluation_stack);
+					vm_pop();
 					vm_push(make3(make_operator("vm-eval"), list_empty, make2(current_consequent, environment)));
 
 					return;
@@ -1314,7 +1286,7 @@ void vm_step() {
 
 			if(waiting == atom_false) {
 				if(evaluation_items == list_empty) {
-					evaluation_stack = make_cdr(evaluation_stack);
+					vm_pop();
 
 					if(type->number_i == OP_AND) {
 						data_push(atom_true);
@@ -1331,16 +1303,17 @@ void vm_step() {
 				waiting = atom_true;
 			}
 			else {
-				LispNodeRC result = data_pop();
+				LispNodeRC result = data_peek();
+				data_pop();
 
 				if(type->number_i == OP_AND && result == atom_false) {
-					evaluation_stack = make_cdr(evaluation_stack);
+					vm_pop();
 					data_push(atom_false);
 
 					return;
 				}
 				if(type->number_i == OP_OR && result == atom_true) {
-					evaluation_stack = make_cdr(evaluation_stack);
+					vm_pop();
 					data_push(atom_true);
 
 					return;
@@ -1382,7 +1355,9 @@ void vm_step() {
 				const LispNodeRC &operation = input->head->item;
 				const LispNodeRC &symbol = input->head->next->item;
 
-				LispNodeRC evaluated_symbol = data_pop();
+				LispNodeRC evaluated_symbol = data_peek();
+				data_pop();
+
 				LispNodeRC result;
 
 				if(symbol->is_list()) {
@@ -1398,7 +1373,7 @@ void vm_step() {
 					return;
 				}
 
-				evaluation_stack = make_cdr(evaluation_stack);
+				vm_pop();
 				data_push(list_empty);
 			}
 
@@ -1423,7 +1398,7 @@ void vm_step() {
 				context_environment = reinterpret_cast<LispNodeRC *>(saved_context_environment->data);
 				saved_context_environment->data = nullptr;
 
-				evaluation_stack = make_cdr(evaluation_stack);
+				vm_pop();
 			}
 
 			return;
@@ -1441,7 +1416,8 @@ void vm_step() {
 				LispNodeRC evaluated_input = list_empty;
 
 				for(size_t i = 0; i < arity->number_i; i++) {
-					evaluated_input = make_cons(data_pop(), evaluated_input);
+					evaluated_input = make_cons(data_peek(), evaluated_input);
+					data_pop();
 				}
 
 				// Add the original operator to the front of the evaluated arguments
@@ -1458,7 +1434,7 @@ void vm_step() {
 				const LispNodeRC &new_expression = lambda_application->head->item;
 				const LispNodeRC &new_environment = lambda_application->head->next->item;
 
-				evaluation_stack = make_cdr(evaluation_stack);
+				vm_pop();
 				vm_push(make3(make_operator("vm-begin"), make2(list_empty, atom_false), make2(new_expression, new_environment)));
 			}
 
@@ -1466,7 +1442,7 @@ void vm_step() {
 		}
 		// (vm-eval '() (input environment))
 		case OP_VM_EVAL: {
-			evaluation_stack = make_cdr(evaluation_stack);
+			vm_pop();
 			eval_reduce(input, environment);
 
 			return;
@@ -1477,7 +1453,7 @@ void vm_step() {
 			LispNodeRC &waiting = vm_op_state->head->next->item;
 
 			if(waiting == atom_false) {
-				if(count_members(input) != 3) {
+				if(count_members(input) != 2) {
 					print_error(input->head->item->data, "missing arguments\n");
 					vm_finish();
 
@@ -1491,7 +1467,8 @@ void vm_step() {
 				waiting = atom_true;
 			}
 			else {
-				LispNodeRC evaluated_symbol = data_pop();
+				LispNodeRC evaluated_symbol = data_peek();
+				data_pop();
 
 				if(type->number_i == OP_LOAD) {
 #ifdef INITIAL_ENVIRONMENT
@@ -1508,7 +1485,7 @@ void vm_step() {
 
 					LispNodeRC load_expression = make3(make_operator("define"), evaluated_symbol, parse_expression(value, false));
 
-					evaluation_stack = make_cdr(evaluation_stack);
+					vm_pop();
 					vm_push(make3(make_operator("vm-eval"), list_empty, make2(load_expression, environment)));
 #else
 					print_error("load", "no compiled support\n");
@@ -1518,7 +1495,7 @@ void vm_step() {
 				else {
 					LispNodeRC unload_expression = make3(make_operator("set!"), evaluated_symbol, atom_false);
 
-					evaluation_stack = make_cdr(evaluation_stack);
+					vm_pop();
 					vm_push(make3(make_operator("vm-eval"), list_empty, make2(input, environment)));
 				}
 			}
@@ -1532,7 +1509,8 @@ void vm_step() {
 			LispNodeRC evaluated_input = list_empty;
 
 			for(size_t i = 0; i < arity->number_i; i++) {
-				evaluated_input = make_cons(data_pop(), evaluated_input);
+				evaluated_input = make_cons(data_peek(), evaluated_input);
+				data_pop();
 			}
 				
 			// Add the original operator to the front of the evaluated arguments
@@ -1556,13 +1534,13 @@ void vm_step() {
 			}
 
 			if(result == nullptr) {
-				// Error message printed in the eval_genX function
+				print_error(input->head->item->data, "evaluation error\n");
 				vm_finish();
 
 				return;
 			}
 
-			evaluation_stack = make_cdr(evaluation_stack);
+			vm_pop();
 			data_push(result);
 
 			return;
@@ -1586,7 +1564,7 @@ void vm_step() {
 				waiting = atom_true;
 			}
 			else {
-				evaluation_stack = make_cdr(evaluation_stack);
+				vm_pop();
 			}
 
 			return;
@@ -1606,6 +1584,10 @@ LispNodeRC eval_expression(const LispNodeRC input, const LispNodeRC environment)
 
 	while(evaluation_stack != list_empty) {
 		vm_step();
+	}
+
+	if(data_stack == list_empty) {
+		return nullptr;
 	}
 
 	return data_peek();
