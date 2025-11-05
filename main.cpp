@@ -836,36 +836,14 @@ LispNodeRC eval_lambda(const LispNodeRC &input, const LispNodeRC &environment) {
 		return nullptr;
 	}
 
-	return make_cons(make_operator("closure"), make3(input, environment, list_empty));
+	return make_cons(make_operator("closure"), make2(input, environment));
 }
 
-LispNodeRC make_define(const LispNodeRC &operation, const LispNodeRC &symbol, const LispNodeRC &value) {
-	if(!symbol->is_atom() || !symbol->is_pure()) {
-		print_error("define/set!", "argument type error\n");
+LispNodeRC make_environment(const LispNodeRC &environment) {
+	// Creates an environment with a dummy entry to separate frames
+	LispNodeRC new_environment = make_cons(make2(atom_false, atom_false), environment);
 
-		return nullptr;
-	}
-
-	int operation_index = get_operation_index(operation->data);
-
-	// Side effect: changes the current environment
-	if(operation_index == OP_DEFINE) {
-		// Just append into environment
-		*context_environment = make_cons(make2(symbol, value), *context_environment);
-	}
-	else if(operation_index == OP_SET_E) {
-		// Make query with replacement
-		make_query_optional_replace(symbol, *context_environment, value);
-	}
-
-	// Make closures' environments to include their own definition (for recursion)
-	if(value->is_operator("closure")) {
-		LispNodeRC &closure_name = value->head->next->next->next->item;
-
-		closure_name = symbol;
-	}
-
-	return *context_environment;
+	return new_environment;
 }
 
 LispNodeRC make_lambda_application(const LispNodeRC &input, const LispNodeRC &environment) {
@@ -873,29 +851,21 @@ LispNodeRC make_lambda_application(const LispNodeRC &input, const LispNodeRC &en
 
 	int operator_index = get_operation_index(closure_or_macro->head->item->data);
 
-	// Defines if we operate on macro substitution mode or in lambda/closure evaluation mode
-	bool lambda_subst = (operator_index == OP_MACRO);
+	// Defines if we operate on macro substitution mode or in closure application mode
+	bool is_macro = (operator_index == OP_MACRO);
+	bool is_closure = (operator_index == OP_CLOSURE);
 
-	const LispNodeRC &procedure = (operator_index == OP_CLOSURE ? closure_or_macro->head->next->item : closure_or_macro);
-
+	const LispNodeRC &procedure = (is_closure ? closure_or_macro->head->next->item : closure_or_macro);
 	const LispNodeRC &procedure_parameters = procedure->head->next->item;
 
 	// Evaluate the function by setting a new environment for the defined parameters
 
-	// Used when lambda_subst == #t:
+	// Used when is_macro == #t:
 	//     Macro expansion: substitutes non-evaluated parameters into arguments in the original expression
 	LispNodeRC new_expression = LispNode::make_list(procedure->get_head_pointer()->get_next_pointer()->get_next_pointer());
-	// Used when lambda_subst == #f:
+	// Used when is_macro == #f:
 	//     Eager evaluation: creates a new environment binding parameters to their eagerly-evaluated arguments
-	LispNodeRC new_environment = (operator_index == OP_CLOSURE ? closure_or_macro->head->next->next->item : environment);
-
-	if(operator_index == OP_CLOSURE) {
-		const LispNodeRC &closure_name = closure_or_macro->head->next->next->next->item;
-
-		if(closure_name != list_empty) {
-			new_environment = make_cons(make2(closure_name, closure_or_macro), new_environment);
-		}
-	}
+	LispNodeRC new_environment = (operator_index == OP_CLOSURE ? make_environment(closure_or_macro->head->next->next->item) : make_environment(environment));
 
 	bool packed_dot = false;
 
@@ -928,7 +898,7 @@ LispNodeRC make_lambda_application(const LispNodeRC &input, const LispNodeRC &en
 			packed_dot = true;
 		}
 
-		if(lambda_subst) {
+		if(is_macro) {
 			new_expression = make_substitution(parameter, argument, new_expression);
 		}
 		else {
@@ -945,14 +915,8 @@ LispNodeRC make_lambda_application(const LispNodeRC &input, const LispNodeRC &en
 	}
 
 	// new_expression is only different from expression if macro substitution is done
-	// new_environment is only different from environment if lambda evaluation is done
+	// new_environment is only different from environment if closure application is done
 	return make2(new_expression, new_environment);
-}
-
-LispNodeRC make_environment() {
-	LispNodeRC result = *context_environment;
-
-	return result;
 }
 
 // VM functions
@@ -1121,13 +1085,13 @@ void eval_reduce(const LispNodeRC &input, const LispNodeRC &environment) {
 
 			case OP_BEGIN:
 				// Special:
-				vm_push(make3(make_operator("vm-begin"), make2(list_empty, atom_false), make2(make_cdr(input), make_environment())));
+				vm_push(make3(make_operator("vm-begin"), make2(list_empty, atom_false), make2(make_cdr(input), make_environment(environment))));
 				return;
 
 			case OP_DEFINE:
 			case OP_SET_E:
 				// Special:
-				vm_push(make3(make_operator("vm-define"), atom_false, make2(input, environment)));
+				vm_push(make3(make_operator("vm-define"), make2(LispNode::make_integer(operation_index), atom_false), make2(input, environment)));
 				return;
 
 			case OP_EVAL:
@@ -1325,53 +1289,56 @@ void vm_step() {
 
 			return;
 		}
-		// (vm-define <waiting> (input environment))
+		// (vm-define (<OP_DEFINE/OP_SET_E> <waiting>) (input environment))
 		case OP_VM_DEFINE: {
-			LispNodeRC &waiting = vm_op_state;
+			const LispNodeRC &type = vm_op_state->head->item;
+			LispNodeRC &waiting = vm_op_state->head->next->item;
 
 			const LispNodeRC &input = vm_op_arguments->head->item;
 			const LispNodeRC &environment = vm_op_arguments->head->next->item;
 
 			const LispNodeRC &operation = input->head->item;
-			const LispNodeRC &symbol = input->head->next->item;
+			LispNodeRC &symbol = input->head->next->item;
 
 			if(waiting == atom_false) {
-				if(count_members(input) != 3) {
+				if(count_members(input) < 3) {
 					print_error(input->head->item->data, "missing arguments\n");
 					vm_finish();
 
 					return;
 				}
+
 				LispNodeRC expression = input->head->next->next->item;
 
 				if(symbol->is_list()) {
 					expression = make_cons(make_operator("lambda"), make_cons(make_cdr(symbol), LispNode::make_list(input->get_head_pointer()->get_next_pointer()->get_next_pointer())));
+					symbol = symbol->head->item;
 				}
 
-				vm_push(make3(make_operator("vm-eval"), list_empty, make2(expression, environment)));
+				if(!symbol->is_atom() || !symbol->is_pure()) {
+					print_error(input->head->item->data, "argument type error\n");
+					vm_finish();
+
+					return;
+				}
+
+				// Extend the frame on environments
+				if(type->number_i == OP_DEFINE) {
+					*context_environment = make_cons(make2(symbol, list_empty), environment);;
+				}
+
+				vm_push(make3(make_operator("vm-eval"), list_empty, make2(expression, *context_environment)));
 				waiting = atom_true;
 			}
 			else {
-				const LispNodeRC &operation = input->head->item;
-				const LispNodeRC &symbol = input->head->next->item;
-
 				LispNodeRC evaluated_symbol = data_peek();
 				data_pop();
 
-				LispNodeRC result;
-
 				if(symbol->is_list()) {
-					result = make_define(operation, symbol->head->item, evaluated_symbol);
-				}
-				else {
-					result = make_define(operation, symbol, evaluated_symbol);
+					symbol = symbol->head->item;
 				}
 
-				if(result == nullptr) {
-					// Error message printed in the make_define() function
-					vm_finish();
-					return;
-				}
+				make_query_optional_replace(symbol, *context_environment, evaluated_symbol);
 
 				vm_pop();
 				data_push(list_empty);
@@ -1395,6 +1362,23 @@ void vm_step() {
 				waiting = atom_true;
 			}
 			else {
+				// Traverses the current frame setting the bindings to null,
+				// which frees the memory of all objects, in particular closures
+				// (we need to explicitly release closures as they have a circular reference to their own environment)
+				for(Box *current_definition_box = (*context_environment)->get_head_pointer(); current_definition_box != nullptr; current_definition_box = current_definition_box->get_next_pointer()) {
+					const LispNodeRC &current_pair = current_definition_box->item;
+
+					const LispNodeRC &key = current_pair->head->item;
+					LispNodeRC &value = current_pair->head->next->item;
+
+					// If we found the dummy node separating frames, break
+					if(key == atom_false) {
+						break;
+					}
+
+					value = list_empty;
+				}
+
 				context_environment = reinterpret_cast<LispNodeRC *>(saved_context_environment->data);
 				saved_context_environment->data = nullptr;
 
