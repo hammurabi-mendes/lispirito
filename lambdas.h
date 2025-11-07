@@ -19,7 +19,6 @@ char *lambda_names[] {
     "modulo",
     "list->string",
     "string->list",
-    "apply",
     "string-ref",
     "string-set!",
     "make-string",
@@ -101,11 +100,6 @@ char *lambda_strings[] {
 "        ((eq? str \"\") '())"
 "        (#t (cons (string-ref str 0) (string->list (substring str 1 (string-length str)))))"
 "    )"
-")",
-// apply
-"(lambda (op . list)"
-"    (define args (flatten list))"
-"    (foldl op (car args) (cdr args))"
 ")",
 // "string-ref"
 "(lambda (str pos)"

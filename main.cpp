@@ -664,7 +664,7 @@ LispNodeRC eval_gen1(const LispNodeRC &input, const LispNodeRC &environment) {
 			return list_empty;
 		case OP_MEM_ALLOC:
 			result = new LispNode(LispType::AtomData);
-			result->data = static_cast<char *>(Allocate(output1->number_i));
+			result->data = static_cast<char *>(malloc(output1->number_i));
 
 			break;
 		case OP_MEM_READ:
@@ -852,8 +852,8 @@ LispNodeRC make_lambda_application(const LispNodeRC &input, const LispNodeRC &en
 	int operator_index = get_operation_index(closure_or_macro->head->item->data);
 
 	// Defines if we operate on macro substitution mode or in closure application mode
-	bool is_macro = (operator_index == OP_MACRO);
 	bool is_closure = (operator_index == OP_CLOSURE);
+	bool is_macro = (operator_index == OP_MACRO);
 
 	const LispNodeRC &procedure = (is_closure ? closure_or_macro->head->next->item : closure_or_macro);
 	const LispNodeRC &procedure_parameters = procedure->head->next->item;
@@ -865,7 +865,7 @@ LispNodeRC make_lambda_application(const LispNodeRC &input, const LispNodeRC &en
 	LispNodeRC new_expression = LispNode::make_list(procedure->get_head_pointer()->get_next_pointer()->get_next_pointer());
 	// Used when is_macro == #f:
 	//     Eager evaluation: creates a new environment binding parameters to their eagerly-evaluated arguments
-	LispNodeRC new_environment = (operator_index == OP_CLOSURE ? make_environment(closure_or_macro->head->next->next->item) : make_environment(environment));
+	LispNodeRC new_environment = (operator_index == OP_CLOSURE ? make_environment(closure_or_macro->head->next->next->item) : environment);
 
 	bool packed_dot = false;
 
@@ -955,7 +955,7 @@ void vm_reset() {
 	context_environment = &global_environment;
 }
 
-void eval_reduce(const LispNodeRC &input, const LispNodeRC &environment) {
+bool eval_reduce(const LispNodeRC &input, const LispNodeRC &environment) {
 	if(input->is_atom()) {
 		if(input->is_pure()) {
 			// Try to get an environment definition
@@ -964,35 +964,31 @@ void eval_reduce(const LispNodeRC &input, const LispNodeRC &environment) {
 			
 			if(other_input != nullptr) {
 				data_push(other_input);
-				return;
+				return true;
 			}
 
 			// Try to get a basic operator
 
 			if(get_operation_index(input->data) != -1) {
 				data_push(input);
-				return;
+				return true;
 			}
 
 			// All attemps failed at this point
 
-			print_error(input->data, "cannot evaluate\n");
-			vm_finish();
-
-			return;
+			print_error(input->data, "evaluation error\n");
+			return false;
 		}
 
 		data_push(input);
-		return;
+		return true;
 	}
 
 	// Input is a list...
 
 	if(input->head == nullptr) {
-		print_error("\'()", "cannot evaluate\n");
-		vm_finish();
-
-		return;
+		print_error("\'()", "evaluation error\n");
+		return false;
 	}
 
 	const LispNodeRC &first = input->head->item;
@@ -1005,19 +1001,19 @@ void eval_reduce(const LispNodeRC &input, const LispNodeRC &environment) {
 			case OP_QUOTE:
 				// Special: does not evaluate
 				vm_push(make3(make_operator("vm-quote"), list_empty, make2(input, environment)));
-				return;
+				return true;
 
 			case OP_COND:
 				// Special:
 				vm_push(make3(make_operator("vm-cond"), atom_false, make2(make_cdr(input), environment)));
-				return;
+				return true;
 
 			case OP_READ:
 			case OP_NEWLINE:
 			case OP_CURRENT_ENVIRONMENT:
 				// Normal:
 				vm_push(make3(make_operator("vm-normal"), LispNode::make_integer(0), make2(input, environment)));
-				return;
+				return true;
 
 			case OP_CAR:
 			case OP_CDR:
@@ -1045,13 +1041,13 @@ void eval_reduce(const LispNodeRC &input, const LispNodeRC &environment) {
 			case OP_MEM_ADDR:
 				// Normal:
 				vm_push(make3(make_operator("vm-normal"), LispNode::make_integer(1), make2(input, environment)));
-				return;
+				return true;
 
 			case OP_LOAD:
 			case OP_UNLOAD:
 				// Special:
 				vm_push(make3(make_operator("vm-load"), make2(LispNode::make_integer(operation_index), atom_false), make2(input, environment)));
-				return;
+				return true;
 
 			case OP_EQ_Q:
 			case OP_CONS:
@@ -1068,47 +1064,53 @@ void eval_reduce(const LispNodeRC &input, const LispNodeRC &environment) {
 			case OP_MEM_WRITE:
 				// Normal:
 				vm_push(make3(make_operator("vm-normal"), LispNode::make_integer(2), make2(input, environment)));
-				return;
+				return true;
 
 			case OP_SUBST:
 			case OP_MEM_FILL:
 			case OP_MEM_COPY:
 				// Normal:
 				vm_push(make3(make_operator("vm-normal"), LispNode::make_integer(3), make2(input, environment)));
-				return;
+				return true;
 
 			case OP_AND:
 			case OP_OR:
 				// Special:
 				vm_push(make3(make_operator("vm-logic"), make2(LispNode::make_integer(operation_index), atom_false), make2(make_cdr(input), environment)));
-				return;
+				return true;
 
 			case OP_BEGIN:
 				// Special:
 				vm_push(make3(make_operator("vm-begin"), make2(list_empty, atom_false), make2(make_cdr(input), make_environment(environment))));
-				return;
+				return true;
 
 			case OP_DEFINE:
 			case OP_SET_E:
 				// Special:
 				vm_push(make3(make_operator("vm-define"), make2(LispNode::make_integer(operation_index), atom_false), make2(input, environment)));
-				return;
+				return true;
+
 
 			case OP_EVAL:
-				vm_push(make2(input, environment));
-				return;
-
-			case OP_MACRO:
-				data_push(eval_macro(input, environment));
-				return;
-
-			case OP_CLOSURE:
-				data_push(eval_closure(input, environment));
-				return;
+				vm_push(make3(make_operator("vm-eval"), list_empty, make2(input, environment)));
+				return true;
 
 			case OP_LAMBDA:
 				data_push(eval_lambda(input, environment));
-				return;
+				return true;
+
+			case OP_MACRO:
+				data_push(eval_macro(input, environment));
+				return true;
+
+			case OP_CLOSURE:
+				data_push(eval_closure(input, environment));
+				return true;
+
+			case OP_APPLY:
+				// Normal:
+				vm_push(make3(make_operator("vm-normal"), LispNode::make_integer(count_members(input) - 1), make2(input, environment)));
+				return true;
 		}
 	}
 
@@ -1116,21 +1118,23 @@ void eval_reduce(const LispNodeRC &input, const LispNodeRC &environment) {
 	// 		1) If it has been evaluated, it should be a closure or a macro
 	//		2) If it has not been evaluated, we create a new ("vm-first" ...)
 
-	if(first->is_operator("closure") || first->is_operator("macro")) {
-		vm_push(make3(make_operator("vm-apply"), make2(LispNode::make_integer(count_members(input) - 1), atom_false), make2(input, environment)));
-		return;
+	bool is_closure = first->is_operator("closure");
+	bool is_macro = first->is_operator("macro");
+
+	if(is_closure || is_macro) {
+		vm_push(make3(make_operator("vm-apply"), make3(LispNode::make_integer(count_members(input) - 1), is_closure ? atom_true : atom_false, atom_false), make2(input, environment)));
+		return true;
 	}
 
-	if(first->is_atom() && first->is_pure()) {
+	if((first->is_atom() && first->is_pure()) || first->is_list()) {
 		vm_push(make3(make_operator("vm-first"), atom_false, make2(input, environment)));
-		return;
+		return true;
 	}
 
 	input->print();
-	print_error("at eval_reduce()", "unknown form");
-	vm_finish();
+	print_error(" at eval_reduce()", "unknown form\n");
 
-	return;
+	return false;
 }
 
 void vm_step() {
@@ -1171,7 +1175,7 @@ void vm_step() {
 			LispNodeRC &arity = vm_op_state;
 
 			if(count_members(input) != arity->number_i + 1) {
-				print_error(input->head->item->data, "missing arguments\n");
+				print_error(input->head->item->data, "missing or extra arguments\n");
 				vm_finish();
 
 				return;
@@ -1187,7 +1191,7 @@ void vm_step() {
 		// (vm-quote () (input environment))
 		case OP_VM_QUOTE: {
 			if(count_members(input) != 2) {
-				print_error(input->head->item->data, "missing arguments\n");
+				print_error(input->head->item->data, "missing or extra arguments\n");
 				vm_finish();
 
 				return;
@@ -1355,59 +1359,47 @@ void vm_step() {
 				// Get a non-const reference to the new environment
 				LispNodeRC &new_environment = vm_op_arguments->head->next->item;
 
-				saved_context_environment = LispNode::make_data(LispType::AtomData, context_environment);
+				LispNodeRC **saved_contex_environment_raw = (LispNodeRC **) malloc(sizeof(LispNodeRC *));
+				*saved_contex_environment_raw = context_environment;
+
+				saved_context_environment = LispNode::make_data(LispType::AtomData, saved_contex_environment_raw);
 				context_environment = &new_environment;
 
 				vm_push(make3(make_operator("vm-eval-list"), make2(atom_true, atom_false), vm_op_arguments));
 				waiting = atom_true;
 			}
 			else {
-				// Traverses the current frame setting the bindings to null,
-				// which frees the memory of all objects, in particular closures
-				// (we need to explicitly release closures as they have a circular reference to their own environment)
-				for(Box *current_definition_box = (*context_environment)->get_head_pointer(); current_definition_box != nullptr; current_definition_box = current_definition_box->get_next_pointer()) {
-					const LispNodeRC &current_pair = current_definition_box->item;
-
-					const LispNodeRC &key = current_pair->head->item;
-					LispNodeRC &value = current_pair->head->next->item;
-
-					// If we found the dummy node separating frames, break
-					if(key == atom_false) {
-						break;
-					}
-
-					value = list_empty;
-				}
-
-				context_environment = reinterpret_cast<LispNodeRC *>(saved_context_environment->data);
-				saved_context_environment->data = nullptr;
+				context_environment = *((LispNodeRC **) saved_context_environment->data);
 
 				vm_pop();
 			}
 
 			return;
 		}
-		// (vm-apply (<arity> <waiting>) (input environment))
+		// (vm-apply (<arity> <closure_mode> <waiting>) (input environment))
 		case OP_VM_APPLY: {
 			const LispNodeRC &arity = vm_op_state->head->item;
-			LispNodeRC &waiting = vm_op_state->head->next->item;
+			const LispNodeRC &closure_mode = vm_op_state->head->next->item;
+			LispNodeRC &waiting = vm_op_state->head->next->next->item;
 
-			if(waiting == atom_false) {
+			if(waiting == atom_false && closure_mode == atom_true) {
 				vm_push(make3(make_operator("vm-eval-list"), make2(atom_false, atom_false), make2(make_cdr(input), environment)));
 				waiting = atom_true;
 			}
 			else {
 				LispNodeRC evaluated_input = list_empty;
 
-				for(size_t i = 0; i < arity->number_i; i++) {
-					evaluated_input = make_cons(data_peek(), evaluated_input);
-					data_pop();
+				if(closure_mode == atom_true) {
+					for(size_t i = 0; i < arity->number_i; i++) {
+						evaluated_input = make_cons(data_peek(), evaluated_input);
+						data_pop();
+					}
+
+					// Add the original operator to the front of the evaluated arguments
+					evaluated_input = make_cons(input->head->item, evaluated_input);
 				}
 
-				// Add the original operator to the front of the evaluated arguments
-				evaluated_input = make_cons(input->head->item, evaluated_input);
-
-				LispNodeRC lambda_application = make_lambda_application(evaluated_input, environment);
+				LispNodeRC lambda_application = make_lambda_application(closure_mode == atom_true ? evaluated_input : input, environment);
 
 				if(lambda_application == nullptr) {
 					// Error message printed in the make_lambda_application() function
@@ -1427,7 +1419,10 @@ void vm_step() {
 		// (vm-eval '() (input environment))
 		case OP_VM_EVAL: {
 			vm_pop();
-			eval_reduce(input, environment);
+
+			if(!eval_reduce(input, environment)) {
+				vm_finish();
+			}
 
 			return;
 		}
@@ -1438,7 +1433,7 @@ void vm_step() {
 
 			if(waiting == atom_false) {
 				if(count_members(input) != 2) {
-					print_error(input->head->item->data, "missing arguments\n");
+					print_error(input->head->item->data, "missing or extra arguments\n");
 					vm_finish();
 
 					return;
@@ -1472,7 +1467,7 @@ void vm_step() {
 					vm_pop();
 					vm_push(make3(make_operator("vm-eval"), list_empty, make2(load_expression, environment)));
 #else
-					print_error("load", "no compiled support\n");
+					print_error("vm-load", "no compiled support\n");
 					vm_finish();
 #endif /* INITIAL_ENVIRONMENT */
 				}
@@ -1492,11 +1487,39 @@ void vm_step() {
 
 			LispNodeRC evaluated_input = list_empty;
 
-			for(size_t i = 0; i < arity->number_i; i++) {
+			bool is_apply = input->is_operator("apply");
+
+			if(is_apply) {
+				evaluated_input = data_peek();
+				data_pop();
+
+				if(!evaluated_input->is_list()) {
+					print_error("vm-call", "last argument must be list\n");
+					vm_finish();
+
+					return;
+				}
+			}
+
+			// If it is an apply operation, we already collected one evaluated input
+			int to_collect = (is_apply ? arity->number_i - 1 : arity->number_i);
+
+			for(size_t i = 0; i < to_collect; i++) {
 				evaluated_input = make_cons(data_peek(), evaluated_input);
 				data_pop();
 			}
-				
+
+			// If it is an apply operation, the first input is the operation and it has
+			// already been added
+			if(is_apply) {
+				vm_pop();
+				vm_push(make3(make_operator("vm-eval"), list_empty, make2(evaluated_input, environment)));
+
+				evaluated_input->print();
+
+				return;
+			}
+
 			// Add the original operator to the front of the evaluated arguments
 			evaluated_input = make_cons(input->head->item, evaluated_input);
 
@@ -1555,7 +1578,7 @@ void vm_step() {
 		}
 		default:
 			top->print();
-			print_error("at vm_step()", "unknown operation");
+			print_error(" at vm_step()", "unknown operation\n");
 			vm_finish();
 
 			return;

@@ -13,7 +13,6 @@
 (define modulo (lambda (x m) (- x (* (/ x m) m))))
 (define list->string (lambda (lst)    (foldl (lambda (first acc) (string-append (make-string 1 first) acc)) "" (reverse lst))))
 (define string->list (lambda (str)    (cond        ((eq? str "") '())        (#t (cons (string-ref str 0) (string->list (substring str 1 (string-length str)))))    )))
-(define apply (lambda (op . list)    (define args (flatten list))    (foldl op (car args) (cdr args))))
 (define string-ref (lambda (str pos)    (mem-read (+ (mem-addr str) pos))))
 (define string-set! (lambda (str pos chr)    (mem-write (+ (mem-addr str) pos) chr)))
 (define make-string (lambda (size init)    (begin        (define result (mem-fill (mem-alloc (+ size 1)) init size))        (mem-write (+ (mem-addr result) size) 0)        (data->string result)    )))
