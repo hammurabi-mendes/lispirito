@@ -712,6 +712,12 @@ LispNodeRC eval_gen2(LispNodeRC &input, const LispNodeRC &environment) {
 		}
 
 		if (operation_index >= OP_PLUS && operation_index <= OP_DIVIDE) {
+			if(operation_index == OP_DIVIDE) {
+				if((output2->is_numeric_integral() && output2->number_i == 0.0) || (output2->is_numeric_real() && output2->number_r == 0.0)) {
+					return nullptr;
+				}
+			}
+
 			result = new LispNode(output1->type);
 
 			result->op_arithmetic(operation_index, output1, output2);
@@ -1302,7 +1308,12 @@ void vm_step() {
 			const LispNodeRC &environment = vm_op_arguments->head->next->item;
 
 			const LispNodeRC &operation = input->head->item;
-			LispNodeRC &symbol = input->head->next->item;
+			const LispNodeRC &argument1 = input->head->next->item;
+			const LispNodeRC &argument2 = input->head->next->next->item;
+
+			bool is_define_lambda = argument1->is_list();
+
+			LispNodeRC symbol = is_define_lambda ? make_car(argument1) : input->head->next->item;
 
 			if(waiting == atom_false) {
 				if(count_members(input) < 3) {
@@ -1310,13 +1321,6 @@ void vm_step() {
 					vm_finish();
 
 					return;
-				}
-
-				LispNodeRC expression = input->head->next->next->item;
-
-				if(symbol->is_list()) {
-					expression = make_cons(make_operator("lambda"), make_cons(make_cdr(symbol), LispNode::make_list(input->get_head_pointer()->get_next_pointer()->get_next_pointer())));
-					symbol = symbol->head->item;
 				}
 
 				if(!symbol->is_atom() || !symbol->is_pure()) {
@@ -1331,18 +1335,23 @@ void vm_step() {
 					*context_environment = make_cons(make2(symbol, list_empty), environment);;
 				}
 
+				LispNodeRC expression = argument2;
+
+				if(is_define_lambda) {
+					LispNodeRC lambda_parameters = make_cdr(argument1);
+					LispNodeRC lambda_expression = LispNode::make_list(input->get_head_pointer()->get_next_pointer()->get_next_pointer());
+
+					expression = make_cons(make_operator("lambda"), make_cons(lambda_parameters, lambda_expression));
+				}
+
 				vm_push(make3(make_operator("vm-eval"), list_empty, make2(expression, *context_environment)));
 				waiting = atom_true;
 			}
 			else {
-				LispNodeRC evaluated_symbol = data_peek();
+				LispNodeRC evaluated_expression = data_peek();
 				data_pop();
 
-				if(symbol->is_list()) {
-					symbol = symbol->head->item;
-				}
-
-				make_query_optional_replace(symbol, *context_environment, evaluated_symbol);
+				make_query_optional_replace(symbol, *context_environment, evaluated_expression);
 
 				vm_pop();
 				data_push(list_empty);
@@ -1515,8 +1524,6 @@ void vm_step() {
 				vm_pop();
 				vm_push(make3(make_operator("vm-eval"), list_empty, make2(evaluated_input, environment)));
 
-				evaluated_input->print();
-
 				return;
 			}
 
@@ -1648,7 +1655,7 @@ int main(int argc, char **argv) {
 		}
 
 		LispNodeRC output;
-		
+
 		if((output = eval_expression(input, global_environment)) == nullptr) {
 			fputs("Error evaluating expression\n", stdout);
 			continue;
