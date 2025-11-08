@@ -245,7 +245,8 @@ char *read_expression() {
 	}
 
 	if(nread == 0) {
-		return nullptr;
+		Deallocate(read_buffer);
+		read_buffer = nullptr;
 	}
 
 	return read_buffer;
@@ -470,18 +471,13 @@ LispNodeRC parse_expression(char *buffer, bool deallocate_buffer = true) {
 
 	LispNodeRC result = parse_expression(buffer, strlen(buffer), position, error);
 
-	if(error == true) {
-		// Allocated in read_expression() and deallocated here
-		if(deallocate_buffer) {
-			Deallocate(buffer);
-		}
-
-		return nullptr;
-	}
-
 	// Allocated in read_expression() and deallocated here
 	if(deallocate_buffer) {
 		Deallocate(buffer);
+	}
+
+	if(error == true) {
+		return nullptr;
 	}
 
 	return result;
@@ -713,7 +709,7 @@ LispNodeRC eval_gen2(LispNodeRC &input, const LispNodeRC &environment) {
 
 		if (operation_index >= OP_PLUS && operation_index <= OP_DIVIDE) {
 			if(operation_index == OP_DIVIDE) {
-				if((output2->is_numeric_integral() && output2->number_i == 0.0) || (output2->is_numeric_real() && output2->number_r == 0.0)) {
+				if((output2->is_numeric_integral() && output2->number_i == 0) || (output2->is_numeric_real() && output2->number_r == Real(0.0))) {
 					return nullptr;
 				}
 			}
@@ -1640,10 +1636,12 @@ int main(int argc, char **argv) {
 		char *input_string = read_expression();
 
 		if(input_string == nullptr) {
+			Deallocate(input_string);
 			break;
 		}
 
 		if(strcmp(input_string, "\n") == 0) {
+			Deallocate(input_string);
 			continue;
 		}
 

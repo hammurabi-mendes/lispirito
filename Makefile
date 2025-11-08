@@ -10,7 +10,7 @@ CFLAGS=-I.
 LDFLAGS=
 
 ifeq ($(TARGET_6502), 1)
-CFLAGS+= -DTARGET_6502=1 -DLISP_HEAP_SIZE=8192
+CFLAGS+= -DTARGET_6502=1 -DLISP_HEAP_SIZE=16384
 endif
 
 ifeq ($(TARGET_6502), 1)
@@ -42,7 +42,7 @@ endif
 CPPFLAGS=$(STANDARD) $(CFLAGS)
 
 PROGRAMS=lispirito
-DEPENDENCIES=main.o LispNode.o extra.o operators.o
+DEPENDENCIES+=main.o LispNode.o extra.o operators.o
 
 all: $(PROGRAMS)
 
