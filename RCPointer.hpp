@@ -22,6 +22,10 @@ public:
         set(other.pointer);
     }
 
+    RCPointer(RCPointer &&other) noexcept: pointer{other.pointer} {
+        other.pointer = nullptr;
+    }
+
     RCPointer &operator=(T *other_pointer) {
         if(pointer != other_pointer) {
             set(other_pointer);
@@ -37,6 +41,17 @@ public:
     RCPointer &operator=(const RCPointer &other) {
         if(this != &other) {
             set(other.pointer);
+        }
+
+        return *this;
+    }
+
+    RCPointer &operator=(RCPointer &&other) noexcept {
+        if(this != &other) {
+            set(nullptr);
+
+            pointer = other.pointer;
+            other.pointer = nullptr;
         }
 
         return *this;

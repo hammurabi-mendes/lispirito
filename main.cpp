@@ -87,9 +87,9 @@ int string_index(const char *query, const char **list, int maximum) {
 
 // Make operators
 
-LispNodeRC make_operator(char *operator_name) {
-	LispNode *result = new LispNode(LispType::AtomPure);
-	result->data = strdup(operator_name);
+LispNodeRC make_operator(int operation_index) {
+	LispNode *result = new LispNode(LispType::AtomPureOperator);
+	result->number_i = operation_index;
 
 	return result;
 }
@@ -396,8 +396,16 @@ LispNodeRC parse_atom(char *token) {
 
 	// Pure atoms
 
-	result->type = LispType::AtomPure;
-	result->data = strdup(token);
+	int operation_index = get_operation_index(token);
+
+	if(operation_index != -1) {
+		result->type = LispType::AtomPureOperator;
+		result->number_i = operation_index;
+	}
+	else {
+		result->type = LispType::AtomPure;
+		result->data = strdup(token);
+	}
 
 	// Converted to LispNodeRC
 	return result;
@@ -421,7 +429,7 @@ LispNodeRC parse_expression(char *buffer, size_t buffer_length, size_t &position
 			return nullptr;
 		}
 
-		return make2(make_operator("quote"), quoted);
+		return make2(make_operator(OP_QUOTE), quoted);
 	}
 	
 	if(strcmp(token, "(") == 0) {
@@ -500,7 +508,7 @@ size_t count_members(const LispNodeRC &list) {
 LispNodeRC eval_gen0(const LispNodeRC &input, const LispNodeRC &environment) {
 	const LispNodeRC &operator_name = input->head->item;
 
-	int operation_index = get_operation_index(operator_name->data);
+	int operation_index = operator_name->number_i;
 
 	switch(operation_index) {
 		case OP_READ: {
@@ -532,7 +540,7 @@ LispNodeRC eval_gen1(const LispNodeRC &input, const LispNodeRC &environment) {
 	LispNodeRC &operator_name = input->head->item;
 	LispNodeRC &output1 = input->head->next->item;
 
-	int operation_index = get_operation_index(operator_name->data);
+	int operation_index = operator_name->number_i;
 	LispNode *result = nullptr;
 
 	switch(operation_index) {
@@ -686,7 +694,7 @@ LispNodeRC eval_gen2(LispNodeRC &input, const LispNodeRC &environment) {
 	LispNodeRC &output1 = input->head->next->item;
 	LispNodeRC &output2 = input->head->next->next->item;
 
-	int operation_index = get_operation_index(operator_name->data);
+	int operation_index = operator_name->number_i;
 	LispNode *result = nullptr;
 
 	if(operation_index >= OP_PLUS && operation_index <= OP_BIGGER_EQUAL) {
@@ -777,7 +785,7 @@ LispNodeRC eval_gen3(const LispNodeRC &input, const LispNodeRC &environment) {
 	LispNodeRC &output2 = input->head->next->next->item;
 	LispNodeRC &output3 = input->head->next->next->next->item;
 	
-	int operation_index = get_operation_index(operator_name->data);
+	int operation_index = operator_name->number_i;
 	LispNode *result = nullptr;
 
 	switch(operation_index) {
@@ -838,7 +846,7 @@ LispNodeRC eval_lambda(const LispNodeRC &input, const LispNodeRC &environment) {
 		return nullptr;
 	}
 
-	return make_cons(make_operator("closure"), make2(input, environment));
+	return make_cons(make_operator(OP_CLOSURE), make2(input, environment));
 }
 
 LispNodeRC make_environment(const LispNodeRC &environment) {
@@ -851,7 +859,7 @@ LispNodeRC make_environment(const LispNodeRC &environment) {
 LispNodeRC make_lambda_application(const LispNodeRC &input, const LispNodeRC &environment) {
 	const LispNodeRC &closure_or_macro = input->head->item;
 
-	int operator_index = get_operation_index(closure_or_macro->head->item->data);
+	int operator_index = closure_or_macro->head->item->number_i;
 
 	// Defines if we operate on macro substitution mode or in closure application mode
 	bool is_closure = (operator_index == OP_CLOSURE);
@@ -960,19 +968,18 @@ void vm_reset() {
 bool eval_reduce(const LispNodeRC &input, const LispNodeRC &environment) {
 	if(input->is_atom()) {
 		if(input->is_pure()) {
+			// If it's an operator atom, just evaluate to itself
+			if (input->is_operator()) {
+				data_push(input);
+				return true;
+			}
+
 			// Try to get an environment definition
 
 			LispNodeRC other_input = make_query_optional_replace(input, environment);
 			
 			if(other_input != nullptr) {
 				data_push(other_input);
-				return true;
-			}
-
-			// Try to get a basic operator
-
-			if(get_operation_index(input->data) != -1) {
-				data_push(input);
 				return true;
 			}
 
@@ -997,24 +1004,24 @@ bool eval_reduce(const LispNodeRC &input, const LispNodeRC &environment) {
 
 	if(first->is_atom() && first->is_pure()) {
 		// First try one of the predefined operators
-		int operation_index = get_operation_index(first->data);
+		int operation_index = first->number_i;
 
 		switch(operation_index) {
 			case OP_QUOTE:
 				// Special: does not evaluate
-				vm_push(make3(make_operator("vm-quote"), list_empty, make2(input, environment)));
+				vm_push(make3(make_operator(OP_VM_QUOTE), list_empty, make2(input, environment)));
 				return true;
 
 			case OP_COND:
 				// Special:
-				vm_push(make3(make_operator("vm-cond"), atom_false, make2(make_cdr(input), environment)));
+				vm_push(make3(make_operator(OP_VM_COND), atom_false, make2(make_cdr(input), environment)));
 				return true;
 
 			case OP_READ:
 			case OP_NEWLINE:
 			case OP_CURRENT_ENVIRONMENT:
 				// Normal:
-				vm_push(make3(make_operator("vm-normal"), LispNode::make_integer(0), make2(input, environment)));
+				vm_push(make3(make_operator(OP_VM_NORMAL), LispNode::make_integer(0), make2(input, environment)));
 				return true;
 
 			case OP_CAR:
@@ -1042,13 +1049,13 @@ bool eval_reduce(const LispNodeRC &input, const LispNodeRC &environment) {
 			case OP_MEM_READ:
 			case OP_MEM_ADDR:
 				// Normal:
-				vm_push(make3(make_operator("vm-normal"), LispNode::make_integer(1), make2(input, environment)));
+				vm_push(make3(make_operator(OP_VM_NORMAL), LispNode::make_integer(1), make2(input, environment)));
 				return true;
 
 			case OP_LOAD:
 			case OP_UNLOAD:
 				// Special:
-				vm_push(make3(make_operator("vm-load"), make2(LispNode::make_integer(operation_index), atom_false), make2(input, environment)));
+				vm_push(make3(make_operator(OP_VM_LOAD), make2(LispNode::make_integer(operation_index), atom_false), make2(input, environment)));
 				return true;
 
 			case OP_EQ_Q:
@@ -1065,36 +1072,36 @@ bool eval_reduce(const LispNodeRC &input, const LispNodeRC &environment) {
 			case OP_BIGGER_EQUAL:
 			case OP_MEM_WRITE:
 				// Normal:
-				vm_push(make3(make_operator("vm-normal"), LispNode::make_integer(2), make2(input, environment)));
+				vm_push(make3(make_operator(OP_VM_NORMAL), LispNode::make_integer(2), make2(input, environment)));
 				return true;
 
 			case OP_SUBST:
 			case OP_MEM_FILL:
 			case OP_MEM_COPY:
 				// Normal:
-				vm_push(make3(make_operator("vm-normal"), LispNode::make_integer(3), make2(input, environment)));
+				vm_push(make3(make_operator(OP_VM_NORMAL), LispNode::make_integer(3), make2(input, environment)));
 				return true;
 
 			case OP_AND:
 			case OP_OR:
 				// Special:
-				vm_push(make3(make_operator("vm-logic"), make2(LispNode::make_integer(operation_index), atom_false), make2(make_cdr(input), environment)));
+				vm_push(make3(make_operator(OP_VM_LOGIC), make2(LispNode::make_integer(operation_index), atom_false), make2(make_cdr(input), environment)));
 				return true;
 
 			case OP_BEGIN:
 				// Special:
-				vm_push(make3(make_operator("vm-begin"), make2(list_empty, atom_false), make2(make_cdr(input), make_environment(environment))));
+				vm_push(make3(make_operator(OP_VM_BEGIN), make2(list_empty, atom_false), make2(make_cdr(input), make_environment(environment))));
 				return true;
 
 			case OP_DEFINE:
 			case OP_SET_E:
 				// Special:
-				vm_push(make3(make_operator("vm-define"), make2(LispNode::make_integer(operation_index), atom_false), make2(input, environment)));
+				vm_push(make3(make_operator(OP_VM_DEFINE), make2(LispNode::make_integer(operation_index), atom_false), make2(input, environment)));
 				return true;
 
 
 			case OP_EVAL:
-				vm_push(make3(make_operator("vm-eval"), list_empty, make2(input, environment)));
+				vm_push(make3(make_operator(OP_VM_EVAL), list_empty, make2(input, environment)));
 				return true;
 
 			case OP_LAMBDA:
@@ -1111,7 +1118,7 @@ bool eval_reduce(const LispNodeRC &input, const LispNodeRC &environment) {
 
 			case OP_APPLY:
 				// Normal:
-				vm_push(make3(make_operator("vm-normal"), LispNode::make_integer(count_members(input) - 1), make2(input, environment)));
+				vm_push(make3(make_operator(OP_VM_NORMAL), LispNode::make_integer(count_members(input) - 1), make2(input, environment)));
 				return true;
 		}
 	}
@@ -1120,16 +1127,16 @@ bool eval_reduce(const LispNodeRC &input, const LispNodeRC &environment) {
 	// 		1) If it has been evaluated, it should be a closure or a macro
 	//		2) If it has not been evaluated, we create a new ("vm-first" ...)
 
-	bool is_closure = first->is_operator("closure");
-	bool is_macro = first->is_operator("macro");
+	bool is_closure = first->is_operation(OP_CLOSURE);
+	bool is_macro = first->is_operation(OP_MACRO);
 
 	if(is_closure || is_macro) {
-		vm_push(make3(make_operator("vm-apply"), make3(LispNode::make_integer(count_members(input) - 1), is_closure ? atom_true : atom_false, atom_false), make2(input, environment)));
+		vm_push(make3(make_operator(OP_VM_APPLY), make3(LispNode::make_integer(count_members(input) - 1), is_closure ? atom_true : atom_false, atom_false), make2(input, environment)));
 		return true;
 	}
 
 	if((first->is_atom() && first->is_pure()) || first->is_list()) {
-		vm_push(make3(make_operator("vm-first"), atom_false, make2(input, environment)));
+		vm_push(make3(make_operator(OP_VM_FIRST), atom_false, make2(input, environment)));
 		return true;
 	}
 
@@ -1151,7 +1158,7 @@ void vm_step() {
 	const LispNodeRC &input = vm_op_arguments->head->item;
 	const LispNodeRC &environment = vm_op_arguments->head->next->item;
 
-	int operation_index = get_operation_index(vm_op_name->data);
+	int operation_index = vm_op_name->number_i;
 
 	switch(operation_index) {
 		// (vm-first <waiting> (input environment))
@@ -1159,7 +1166,7 @@ void vm_step() {
 			LispNodeRC &waiting = vm_op_state;
 
 			if(waiting == atom_false) {
-				vm_push(make3(make_operator("vm-eval"), list_empty, make2(input->head->item, environment)));
+				vm_push(make3(make_operator(OP_VM_EVAL), list_empty, make2(input->head->item, environment)));
 				waiting = atom_true;
 			}
 			else {
@@ -1167,7 +1174,7 @@ void vm_step() {
 				data_pop();
 
 				vm_pop();
-				vm_push(make3(make_operator("vm-eval"), list_empty, make2(make_cons(result, make_cdr(input)), environment)));
+				vm_push(make3(make_operator(OP_VM_EVAL), list_empty, make2(make_cons(result, make_cdr(input)), environment)));
 			}
 
 			return;
@@ -1185,8 +1192,8 @@ void vm_step() {
 
 			vm_pop();
 
-			vm_push(make3(make_operator("vm-call"), vm_op_state, vm_op_arguments));
-			vm_push(make3(make_operator("vm-eval-list"), make2(atom_false, atom_false), make2(make_cdr(input), environment)));
+			vm_push(make3(make_operator(OP_VM_CALL), vm_op_state, vm_op_arguments));
+			vm_push(make3(make_operator(OP_VM_EVAL_LIST), make2(atom_false, atom_false), make2(make_cdr(input), environment)));
 
 			return;
 		}
@@ -1226,7 +1233,7 @@ void vm_step() {
 			const LispNodeRC &current_consequent = current_pair->head->next->item;
 
 			if(waiting == atom_false) {
-				vm_push(make3(make_operator("vm-eval"), list_empty, make2(current_test, environment)));
+				vm_push(make3(make_operator(OP_VM_EVAL), list_empty, make2(current_test, environment)));
 				vm_op_state = atom_true;
 			}
 			else {
@@ -1235,7 +1242,7 @@ void vm_step() {
 
 				if(result == atom_true) {
 					vm_pop();
-					vm_push(make3(make_operator("vm-eval"), list_empty, make2(current_consequent, environment)));
+					vm_push(make3(make_operator(OP_VM_EVAL), list_empty, make2(current_consequent, environment)));
 
 					return;
 				}
@@ -1269,7 +1276,7 @@ void vm_step() {
 					return;
 				}
 
-				vm_push(make3(make_operator("vm-eval"), list_empty, make2(evaluation_items->head->item, environment)));
+				vm_push(make3(make_operator(OP_VM_EVAL), list_empty, make2(evaluation_items->head->item, environment)));
 				waiting = atom_true;
 			}
 			else {
@@ -1337,10 +1344,10 @@ void vm_step() {
 					LispNodeRC lambda_parameters = make_cdr(argument1);
 					LispNodeRC lambda_expression = LispNode::make_list(input->get_head_pointer()->get_next_pointer()->get_next_pointer());
 
-					expression = make_cons(make_operator("lambda"), make_cons(lambda_parameters, lambda_expression));
+					expression = make_cons(make_operator(OP_LAMBDA), make_cons(lambda_parameters, lambda_expression));
 				}
 
-				vm_push(make3(make_operator("vm-eval"), list_empty, make2(expression, *context_environment)));
+				vm_push(make3(make_operator(OP_VM_EVAL), list_empty, make2(expression, *context_environment)));
 				waiting = atom_true;
 			}
 			else {
@@ -1370,7 +1377,7 @@ void vm_step() {
 				saved_context_environment = LispNode::make_data(LispType::AtomData, saved_contex_environment_raw);
 				context_environment = &new_environment;
 
-				vm_push(make3(make_operator("vm-eval-list"), make2(atom_true, atom_false), vm_op_arguments));
+				vm_push(make3(make_operator(OP_VM_EVAL_LIST), make2(atom_true, atom_false), vm_op_arguments));
 				waiting = atom_true;
 			}
 			else {
@@ -1388,7 +1395,7 @@ void vm_step() {
 			LispNodeRC &waiting = vm_op_state->head->next->next->item;
 
 			if(waiting == atom_false && closure_mode == atom_true) {
-				vm_push(make3(make_operator("vm-eval-list"), make2(atom_false, atom_false), make2(make_cdr(input), environment)));
+				vm_push(make3(make_operator(OP_VM_EVAL_LIST), make2(atom_false, atom_false), make2(make_cdr(input), environment)));
 				waiting = atom_true;
 			}
 			else {
@@ -1416,7 +1423,7 @@ void vm_step() {
 				const LispNodeRC &new_environment = lambda_application->head->next->item;
 
 				vm_pop();
-				vm_push(make3(make_operator("vm-begin"), make2(list_empty, atom_false), make2(new_expression, new_environment)));
+				vm_push(make3(make_operator(OP_VM_BEGIN), make2(list_empty, atom_false), make2(new_expression, new_environment)));
 			}
 
 			return;
@@ -1433,6 +1440,7 @@ void vm_step() {
 		}
 		// (vm-load (<type>, <waiting>) (input environment))
 		case OP_VM_LOAD: {
+#ifdef INITIAL_ENVIRONMENT
 			const LispNodeRC &type = vm_op_state->head->item;
 			LispNodeRC &waiting = vm_op_state->head->next->item;
 
@@ -1446,7 +1454,7 @@ void vm_step() {
 
 				const LispNodeRC &symbol = input->head->next->item;
 
-				vm_push(make3(make_operator("vm-eval"), list_empty, make2(symbol, environment)));
+				vm_push(make3(make_operator(OP_VM_EVAL), list_empty, make2(symbol, environment)));
 
 				waiting = atom_true;
 			}
@@ -1455,7 +1463,6 @@ void vm_step() {
 				data_pop();
 
 				if(type->number_i == OP_LOAD) {
-#ifdef INITIAL_ENVIRONMENT
 					int index;
 					char *value = nullptr;
 
@@ -1467,22 +1474,22 @@ void vm_step() {
 						value = macro_strings[index];
 					}
 
-					LispNodeRC load_expression = make3(make_operator("define"), evaluated_symbol, parse_expression(value, false));
+					LispNodeRC load_expression = make3(make_operator(OP_DEFINE), evaluated_symbol, parse_expression(value, false));
 
 					vm_pop();
-					vm_push(make3(make_operator("vm-eval"), list_empty, make2(load_expression, environment)));
-#else
-					print_error("vm-load", "no compiled support\n");
-					vm_finish();
-#endif /* INITIAL_ENVIRONMENT */
+					vm_push(make3(make_operator(OP_VM_EVAL), list_empty, make2(load_expression, environment)));
 				}
 				else {
-					LispNodeRC unload_expression = make3(make_operator("set!"), evaluated_symbol, atom_false);
+					LispNodeRC unload_expression = make3(make_operator(OP_SET_E), evaluated_symbol, atom_false);
 
 					vm_pop();
-					vm_push(make3(make_operator("vm-eval"), list_empty, make2(input, environment)));
+					vm_push(make3(make_operator(OP_VM_EVAL), list_empty, make2(input, environment)));
 				}
 			}
+#else
+			print_error("vm-load", "no compiled support\n");
+			vm_finish();
+#endif /* INITIAL_ENVIRONMENT */
 
 			return;
 		}
@@ -1492,7 +1499,7 @@ void vm_step() {
 
 			LispNodeRC evaluated_input = list_empty;
 
-			bool is_apply = input->is_operator("apply");
+			bool is_apply = input->is_operation(OP_APPLY);
 
 			if(is_apply) {
 				evaluated_input = data_peek();
@@ -1518,7 +1525,7 @@ void vm_step() {
 			// already been added
 			if(is_apply) {
 				vm_pop();
-				vm_push(make3(make_operator("vm-eval"), list_empty, make2(evaluated_input, environment)));
+				vm_push(make3(make_operator(OP_VM_EVAL), list_empty, make2(evaluated_input, environment)));
 
 				return;
 			}
@@ -1568,7 +1575,7 @@ void vm_step() {
 					data_pop();
 				}
 
-				vm_push(make3(make_operator("vm-eval"), list_empty, make2(make_car(evaluation_items), environment)));
+				vm_push(make3(make_operator(OP_VM_EVAL), list_empty, make2(make_car(evaluation_items), environment)));
 				evaluation_items = make_cdr(evaluation_items);
 
 				waiting = atom_true;
@@ -1590,7 +1597,7 @@ void vm_step() {
 
 LispNodeRC eval_expression(const LispNodeRC input, const LispNodeRC environment) {
 	vm_reset();
-	vm_push(make3(make_operator("vm-eval"), list_empty, make2(input, environment)));
+	vm_push(make3(make_operator(OP_VM_EVAL), list_empty, make2(input, environment)));
 
 	while(evaluation_stack != list_empty) {
 		vm_step();

@@ -21,6 +21,7 @@ enum LispType : unsigned char {
 	AtomBoolean,
 	AtomString,
 	AtomCharacter,
+	AtomPureOperator,
 	AtomNumericIntegral,
 	AtomNumericReal,
 	AtomData,
@@ -59,12 +60,13 @@ public:
 	bool is_boolean() const;
 	bool is_string() const;
 	bool is_character() const;
+	bool is_operator() const;
 	bool is_numeric() const;
 	bool is_numeric_integral() const;
 	bool is_numeric_real() const;
 	bool is_data() const;
 
-	bool is_operator(char *op) const;
+	bool is_operation(int operator_index) const;
 
 	void op_arithmetic(int operation, LispNodeRC &first, LispNodeRC &second);
 	bool op_comparison(int operation, LispNodeRC &other);
