@@ -910,10 +910,10 @@ LispNodeRC make_lambda_application(const LispNodeRC &input, const LispNodeRC &en
 
 		if(is_macro) {
 			new_expression = make_substitution(parameter, argument, new_expression);
-		}
-		else {
-			// Note that argument has been already evaluated in the old environment
-			new_environment = make_cons(make2(parameter, argument), new_environment);
+			}
+			else {
+				// Note that argument has been already evaluated in the old environment
+				new_environment = make_cons(make2(parameter, argument), new_environment);
 		}
 
 		if(packed_dot) {
@@ -1090,7 +1090,7 @@ bool eval_reduce(const LispNodeRC &input, const LispNodeRC &environment) {
 
 			case OP_BEGIN:
 				// Special:
-				vm_push(make3(make_operator(OP_VM_BEGIN), make2(list_empty, atom_false), make2(make_cdr(input), make_environment(environment))));
+				vm_push(make3(make_operator(OP_VM_BEGIN), make3(list_empty, list_empty, atom_false), make2(make_cdr(input), make_environment(environment))));
 				return true;
 
 			case OP_DEFINE:
@@ -1221,8 +1221,8 @@ void vm_step() {
 			const LispNodeRC &environment = vm_op_arguments->head->next->item;
 
 			if(waiting == atom_false && evaluation_pairs == list_empty) {
-				vm_pop();
 				data_push(list_empty);
+				vm_pop();
 
 				return;
 			}
@@ -1234,7 +1234,7 @@ void vm_step() {
 
 			if(waiting == atom_false) {
 				vm_push(make3(make_operator(OP_VM_EVAL), list_empty, make2(current_test, environment)));
-				vm_op_state = atom_true;
+				waiting = atom_true;
 			}
 			else {
 				LispNodeRC result = data_peek();
@@ -1362,10 +1362,11 @@ void vm_step() {
 
 			return;
 		}
-		// (vm-begin (<saved_context_environment> <waiting>) (evaluation_items environment))
+		// (vm-begin (<saved_context_environment> <current_closure> <waiting>) (evaluation_items environment))
 		case OP_VM_BEGIN: {
 			LispNodeRC &saved_context_environment = vm_op_state->head->item;
-			LispNodeRC &waiting = vm_op_state->head->next->item;
+			const LispNodeRC &current_closure = vm_op_state->head->next->item;
+			LispNodeRC &waiting = vm_op_state->head->next->next->item;
 
 			if(waiting == atom_false) {
 				// Get a non-const reference to the new environment
@@ -1411,6 +1412,26 @@ void vm_step() {
 					evaluated_input = make_cons(input->head->item, evaluated_input);
 				}
 
+				bool rebind = false;
+				LispNodeRC saved_context_environment = nullptr;
+				
+				// Check for tail-recursion
+				if(evaluation_stack->head->next != nullptr) {
+					const LispNodeRC &vm_next = evaluation_stack->head->next->item;
+					const LispNodeRC &vm_next_op_name = vm_next->head->item;
+
+					if(vm_next_op_name->number_i == OP_VM_BEGIN) {
+						const LispNodeRC &vm_next_op_state = vm_next->head->next->item;
+						const LispNodeRC &current_closure = vm_next_op_state->head->next->item;
+
+						if(current_closure == input->head->item) {
+							saved_context_environment = vm_next_op_state->head->item;
+
+							rebind = true;
+						}
+					}
+				}
+
 				LispNodeRC lambda_application = make_lambda_application(closure_mode == atom_true ? evaluated_input : input, environment);
 
 				if(lambda_application == nullptr) {
@@ -1423,7 +1444,14 @@ void vm_step() {
 				const LispNodeRC &new_environment = lambda_application->head->next->item;
 
 				vm_pop();
-				vm_push(make3(make_operator(OP_VM_BEGIN), make2(list_empty, atom_false), make2(new_expression, new_environment)));
+
+				if(rebind) {
+					// Complete the previous begin, make a new one on the same stack level
+					context_environment = *((LispNodeRC **) saved_context_environment->data);
+					vm_pop();
+				}
+
+				vm_push(make3(make_operator(OP_VM_BEGIN), make3(list_empty, closure_mode == atom_true ? input->head->item : list_empty, atom_false), make2(new_expression, new_environment)));
 			}
 
 			return;
@@ -1570,19 +1598,27 @@ void vm_step() {
 			LispNodeRC &evaluation_items = vm_op_arguments->head->item;
 			const LispNodeRC &environment = vm_op_arguments->head->next->item;
 
-			if(evaluation_items != list_empty) {
-				if(waiting == atom_true && discard_intermediary == atom_true) {
-					data_pop();
-				}
+			if(evaluation_items == list_empty) {
+				data_push(list_empty);
+				vm_pop();
 
-				vm_push(make3(make_operator(OP_VM_EVAL), list_empty, make2(make_car(evaluation_items), environment)));
-				evaluation_items = make_cdr(evaluation_items);
-
-				waiting = atom_true;
+				return;
 			}
-			else {
+
+			// If we are working in a begin operator
+			if(waiting == atom_true && discard_intermediary == atom_true) {
+				data_pop();
+			}
+
+			// For tail-recursion
+			if(evaluation_items->head->next == nullptr) {
 				vm_pop();
 			}
+
+			vm_push(make3(make_operator(OP_VM_EVAL), list_empty, make2(make_car(evaluation_items), environment)));
+			evaluation_items = make_cdr(evaluation_items);
+
+			waiting = atom_true;
 
 			return;
 		}
