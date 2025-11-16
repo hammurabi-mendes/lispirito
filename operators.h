@@ -87,4 +87,26 @@ enum LispOperation {
 
 constexpr int NUMBER_BASIC_OPERATORS = OP_VM_EVAL_LIST + 1;
 
+enum ReduceMode : unsigned char {
+    SpecialQuote,
+    SpecialCond,
+    SpecialLogic,
+    SpecialBegin,
+    SpecialDefine,
+    SpecialEval,
+    SpecialLoad,
+    Normal0,
+    Normal1,
+    Normal2,
+    Normal3,
+    NormalX,
+    ImmediateLambda,
+    ImmediateMacro,
+    ImmediateClosure,
+    VM,
+    Unspecified
+};
+
+extern ReduceMode operator_reduce_modes[];
+
 #endif /* OPERATORS_H */

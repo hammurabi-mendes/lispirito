@@ -21,7 +21,7 @@ enum LispType : unsigned char {
 	AtomBoolean,
 	AtomString,
 	AtomCharacter,
-	AtomPureOperator,
+	AtomOperator,
 	AtomNumericIntegral,
 	AtomNumericReal,
 	AtomData,

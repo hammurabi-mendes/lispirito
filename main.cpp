@@ -88,7 +88,7 @@ int string_index(const char *query, const char **list, int maximum) {
 // Make operators
 
 LispNodeRC make_operator(int operation_index) {
-	LispNode *result = new LispNode(LispType::AtomPureOperator);
+	LispNode *result = new LispNode(LispType::AtomOperator);
 	result->number_i = operation_index;
 
 	return result;
@@ -394,12 +394,12 @@ LispNodeRC parse_atom(char *token) {
 		return result;
 	}
 
-	// Pure atoms
+	// Operator or pure atoms
 
 	int operation_index = get_operation_index(token);
 
 	if(operation_index != -1) {
-		result->type = LispType::AtomPureOperator;
+		result->type = LispType::AtomOperator;
 		result->number_i = operation_index;
 	}
 	else {
@@ -884,7 +884,7 @@ LispNodeRC make_lambda_application(const LispNodeRC &input, const LispNodeRC &en
 
 	while(current_parameter_box != nullptr || current_argument_box != nullptr) {
 		if(current_parameter_box == nullptr || current_argument_box == nullptr) {
-			print_error("lambda application", "missing or extra arguments\n");
+			print_error("operator application", "missing or extra arguments\n");
 
 			return nullptr;
 		}
@@ -894,7 +894,7 @@ LispNodeRC make_lambda_application(const LispNodeRC &input, const LispNodeRC &en
 		LispNodeRC argument = current_argument_box->item;
 
 		if(!parameter->is_atom() || !parameter->is_pure()) {
-			print_error("lambda application", "argument type error\n");
+			print_error("operator application", "argument type error\n");
 
 			return nullptr;
 		}
@@ -910,10 +910,10 @@ LispNodeRC make_lambda_application(const LispNodeRC &input, const LispNodeRC &en
 
 		if(is_macro) {
 			new_expression = make_substitution(parameter, argument, new_expression);
-			}
-			else {
-				// Note that argument has been already evaluated in the old environment
-				new_environment = make_cons(make2(parameter, argument), new_environment);
+		}
+		else {
+			// Note that argument has been already evaluated in the old environment
+			new_environment = make_cons(make2(parameter, argument), new_environment);
 		}
 
 		if(packed_dot) {
@@ -968,12 +968,6 @@ void vm_reset() {
 bool eval_reduce(const LispNodeRC &input, const LispNodeRC &environment) {
 	if(input->is_atom()) {
 		if(input->is_pure()) {
-			// If it's an operator atom, just evaluate to itself
-			if (input->is_operator()) {
-				data_push(input);
-				return true;
-			}
-
 			// Try to get an environment definition
 
 			LispNodeRC other_input = make_query_optional_replace(input, environment);
@@ -982,8 +976,6 @@ bool eval_reduce(const LispNodeRC &input, const LispNodeRC &environment) {
 				data_push(other_input);
 				return true;
 			}
-
-			// All attemps failed at this point
 
 			print_error(input->data, "evaluation error\n");
 			return false;
@@ -1002,121 +994,80 @@ bool eval_reduce(const LispNodeRC &input, const LispNodeRC &environment) {
 
 	const LispNodeRC &first = input->head->item;
 
-	if(first->is_atom() && first->is_pure()) {
+	if(first->is_operator()) {
 		// First try one of the predefined operators
 		int operation_index = first->number_i;
+		int operation_reduce_mode = operation_index >= 0 ? operator_reduce_modes[first->number_i] : Unspecified;
 
-		switch(operation_index) {
-			case OP_QUOTE:
+		switch(operation_reduce_mode) {
+			case SpecialQuote:
 				// Special: does not evaluate
 				vm_push(make3(make_operator(OP_VM_QUOTE), list_empty, make2(input, environment)));
 				return true;
 
-			case OP_COND:
+			case SpecialCond:
 				// Special:
 				vm_push(make3(make_operator(OP_VM_COND), atom_false, make2(make_cdr(input), environment)));
 				return true;
 
-			case OP_READ:
-			case OP_NEWLINE:
-			case OP_CURRENT_ENVIRONMENT:
+			case Normal0:
 				// Normal:
 				vm_push(make3(make_operator(OP_VM_NORMAL), LispNode::make_integer(0), make2(input, environment)));
 				return true;
 
-			case OP_CAR:
-			case OP_CDR:
-			case OP_ATOM_Q:
-			case OP_PAIR_Q:
-			case OP_CHAR_Q:
-			case OP_BOOLEAN_Q:
-			case OP_STRING_Q:
-			case OP_NUMBER_Q:
-			case OP_INTEGER_Q:
-			case OP_REAL_Q:
-			case OP_INTEGER_REAL:
-			case OP_REAL_INTEGER:
-			case OP_INTEGER_CHAR:
-			case OP_CHAR_INTEGER:
-			case OP_NUMBER_STRING:
-			case OP_STRING_NUMBER:
-			case OP_STRING_DATA:
-			case OP_DATA_STRING:
-			case OP_NOT:
-			case OP_WRITE:
-			case OP_DISPLAY:
-			case OP_MEM_ALLOC:
-			case OP_MEM_READ:
-			case OP_MEM_ADDR:
+			case Normal1:
 				// Normal:
 				vm_push(make3(make_operator(OP_VM_NORMAL), LispNode::make_integer(1), make2(input, environment)));
 				return true;
 
-			case OP_LOAD:
-			case OP_UNLOAD:
+			case SpecialLoad:
 				// Special:
 				vm_push(make3(make_operator(OP_VM_LOAD), make2(LispNode::make_integer(operation_index), atom_false), make2(input, environment)));
 				return true;
 
-			case OP_EQ_Q:
-			case OP_CONS:
-			case OP_ASSOC:
-			case OP_PLUS:
-			case OP_MINUS:
-			case OP_TIMES:
-			case OP_DIVIDE:
-			case OP_LESS:
-			case OP_EQUAL:
-			case OP_BIGGER:
-			case OP_LESS_EQUAL:
-			case OP_BIGGER_EQUAL:
-			case OP_MEM_WRITE:
+			case Normal2:
 				// Normal:
 				vm_push(make3(make_operator(OP_VM_NORMAL), LispNode::make_integer(2), make2(input, environment)));
 				return true;
 
-			case OP_SUBST:
-			case OP_MEM_FILL:
-			case OP_MEM_COPY:
+			case Normal3:
 				// Normal:
 				vm_push(make3(make_operator(OP_VM_NORMAL), LispNode::make_integer(3), make2(input, environment)));
 				return true;
 
-			case OP_AND:
-			case OP_OR:
+			case SpecialLogic:
 				// Special:
 				vm_push(make3(make_operator(OP_VM_LOGIC), make2(LispNode::make_integer(operation_index), atom_false), make2(make_cdr(input), environment)));
 				return true;
 
-			case OP_BEGIN:
+			case SpecialBegin:
 				// Special:
 				vm_push(make3(make_operator(OP_VM_BEGIN), make3(list_empty, list_empty, atom_false), make2(make_cdr(input), make_environment(environment))));
 				return true;
 
-			case OP_DEFINE:
-			case OP_SET_E:
+			case SpecialDefine:
 				// Special:
 				vm_push(make3(make_operator(OP_VM_DEFINE), make2(LispNode::make_integer(operation_index), atom_false), make2(input, environment)));
 				return true;
 
 
-			case OP_EVAL:
+			case SpecialEval:
 				vm_push(make3(make_operator(OP_VM_EVAL), list_empty, make2(input, environment)));
 				return true;
 
-			case OP_LAMBDA:
+			case ImmediateLambda:
 				data_push(eval_lambda(input, environment));
 				return true;
 
-			case OP_MACRO:
+			case ImmediateMacro:
 				data_push(eval_macro(input, environment));
 				return true;
 
-			case OP_CLOSURE:
+			case ImmediateClosure:
 				data_push(eval_closure(input, environment));
 				return true;
 
-			case OP_APPLY:
+			case NormalX:
 				// Normal:
 				vm_push(make3(make_operator(OP_VM_NORMAL), LispNode::make_integer(count_members(input) - 1), make2(input, environment)));
 				return true;
