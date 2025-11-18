@@ -1172,8 +1172,8 @@ void vm_step() {
 			const LispNodeRC &environment = vm_op_arguments->head->next->item;
 
 			if(waiting == atom_false && evaluation_pairs == list_empty) {
-				data_push(list_empty);
 				vm_pop();
+				data_push(list_empty);
 
 				return;
 			}
@@ -1221,44 +1221,58 @@ void vm_step() {
 			LispNodeRC &evaluation_items = vm_op_arguments->head->item;
 			const LispNodeRC &environment = vm_op_arguments->head->next->item;
 
-			if(waiting == atom_false) {
-				if(evaluation_items == list_empty) {
-					vm_pop();
+			if(evaluation_items == list_empty) {
+				vm_pop();
 
-					if(type->number_i == OP_AND) {
-						data_push(atom_true);
-					}
-
-					if(type->number_i == OP_OR) {
-						data_push(atom_false);
-					}
-
-					return;
+				if(type->number_i == OP_AND) {
+					data_push(atom_true);
 				}
 
+				if(type->number_i == OP_OR) {
+					data_push(atom_false);
+				}
+
+				return;
+			}
+
+			if(waiting == atom_false) {
 				vm_push(make3(make_operator(OP_VM_EVAL), list_empty, make2(evaluation_items->head->item, environment)));
 				waiting = atom_true;
+
+				return;
 			}
-			else {
-				LispNodeRC result = data_peek();
-				data_pop();
 
-				if(type->number_i == OP_AND && result == atom_false) {
-					vm_pop();
-					data_push(atom_false);
+			LispNodeRC result = data_peek();
+			data_pop();
 
-					return;
-				}
-				if(type->number_i == OP_OR && result == atom_true) {
-					vm_pop();
-					data_push(atom_true);
+			if(type->number_i == OP_AND && result == atom_false) {
+				vm_pop();
+				data_push(atom_false);
 
-					return;
-				}
-
-				evaluation_items = make_cdr(evaluation_items);
-				waiting = atom_false;
+				return;
 			}
+			if(type->number_i == OP_OR && result == atom_true) {
+				vm_pop();
+				data_push(atom_true);
+
+				return;
+			}
+
+			bool last_item = (evaluation_items->head->next == nullptr);
+
+			// For tail-recursion
+			if(last_item) {
+				vm_pop();
+			}
+
+			vm_push(make3(make_operator(OP_VM_EVAL), list_empty, make2(evaluation_items->head->item, environment)));
+
+			if(last_item) {
+				return;
+			}
+
+			evaluation_items = make_cdr(evaluation_items);
+			waiting = atom_false;
 
 			return;
 		}
@@ -1572,8 +1586,8 @@ void vm_step() {
 			const LispNodeRC &environment = vm_op_arguments->head->next->item;
 
 			if(evaluation_items == list_empty) {
-				data_push(list_empty);
 				vm_pop();
+				data_push(list_empty);
 
 				return;
 			}
