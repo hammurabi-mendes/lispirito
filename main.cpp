@@ -1102,14 +1102,14 @@ void vm_step() {
 	// so the data it points to is still valid after we pop from it
 	LispNodeRC top = vm_peek();
 
-	const LispNodeRC &vm_op_name = top->head->item;
+	const LispNodeRC &vm_op = top->head->item;
 	LispNodeRC &vm_op_state = top->head->next->item;
 	const LispNodeRC &vm_op_arguments = top->head->next->next->item;
 
 	const LispNodeRC &input = vm_op_arguments->head->item;
 	const LispNodeRC &environment = vm_op_arguments->head->next->item;
 
-	int operation_index = vm_op_name->number_i;
+	int operation_index = vm_op->number_i;
 
 	switch(operation_index) {
 		// (vm-first <waiting> (input environment))
@@ -1179,9 +1179,7 @@ void vm_step() {
 			}
 
 			const LispNodeRC &current_pair = evaluation_pairs->head->item;
-
 			const LispNodeRC &current_test = current_pair->head->item;
-			const LispNodeRC &current_consequent = current_pair->head->next->item;
 
 			if(waiting == atom_false) {
 				vm_push(make3(make_operator(OP_VM_EVAL), list_empty, make2(current_test, environment)));
@@ -1193,7 +1191,18 @@ void vm_step() {
 
 				if(result == atom_true) {
 					vm_pop();
-					vm_push(make3(make_operator(OP_VM_EVAL), list_empty, make2(current_consequent, environment)));
+
+					if(current_pair->get_head_pointer()->get_next_pointer()->get_next_pointer() == nullptr) {
+						const LispNodeRC &current_consequent = current_pair->head->next->item;
+
+						vm_push(make3(make_operator(OP_VM_EVAL), list_empty, make2(current_consequent, environment)));
+					}
+					else {
+						// The consequent is a sequence of operations
+						LispNodeRC current_consequent = LispNode::make_list(current_pair->get_head_pointer()->get_next_pointer());
+
+						vm_push(make3(make_operator(OP_VM_BEGIN), make3(list_empty, list_empty, atom_false), make2(current_consequent, environment)));
+					}
 
 					return;
 				}
@@ -1323,17 +1332,15 @@ void vm_step() {
 				// Get a non-const reference to the new environment
 				LispNodeRC &new_environment = vm_op_arguments->head->next->item;
 
-				LispNodeRC **saved_contex_environment_raw = (LispNodeRC **) malloc(sizeof(LispNodeRC *));
-				*saved_contex_environment_raw = context_environment;
-
-				saved_context_environment = LispNode::make_data(LispType::AtomData, saved_contex_environment_raw);
+				saved_context_environment = LispNode::make_data(LispType::AtomData, context_environment);
 				context_environment = &new_environment;
 
 				vm_push(make3(make_operator(OP_VM_EVAL_LIST), make2(atom_true, atom_false), vm_op_arguments));
 				waiting = atom_true;
 			}
 			else {
-				context_environment = *((LispNodeRC **) saved_context_environment->data);
+				context_environment = reinterpret_cast<LispNodeRC *>(saved_context_environment->data);
+				saved_context_environment->data = nullptr;
 
 				vm_pop();
 			}
@@ -1363,22 +1370,28 @@ void vm_step() {
 					evaluated_input = make_cons(input->head->item, evaluated_input);
 				}
 
-				bool rebind = false;
-				LispNodeRC saved_context_environment = nullptr;
-				
+				bool tail_situation = false;
+				unsigned int tail_begin_blocks_found = 0;
+
 				// Check for tail-recursion
 				if(evaluation_stack->head->next != nullptr) {
-					const LispNodeRC &vm_next = evaluation_stack->head->next->item;
-					const LispNodeRC &vm_next_op_name = vm_next->head->item;
+					for(Box *current_box = evaluation_stack->get_head_pointer()->get_next_pointer(); current_box != nullptr; current_box = current_box->get_next_pointer()) {
+						const LispNodeRC &vm_next = current_box->item;
+						const LispNodeRC &vm_next_op = vm_next->head->item;
 
-					if(vm_next_op_name->number_i == OP_VM_BEGIN) {
-						const LispNodeRC &vm_next_op_state = vm_next->head->next->item;
-						const LispNodeRC &current_closure = vm_next_op_state->head->next->item;
+						if(vm_next_op->number_i == OP_VM_BEGIN) {
+							tail_begin_blocks_found++;
 
-						if(current_closure == input->head->item) {
-							saved_context_environment = vm_next_op_state->head->item;
+							const LispNodeRC &vm_next_op_state = vm_next->head->next->item;
+							const LispNodeRC &current_closure = vm_next_op_state->head->next->item;
 
-							rebind = true;
+							if(current_closure == input->head->item) {
+								tail_situation = true;
+								break;
+							}
+						}
+						else {
+							break;
 						}
 					}
 				}
@@ -1396,10 +1409,19 @@ void vm_step() {
 
 				vm_pop();
 
-				if(rebind) {
-					// Complete the previous begin, make a new one on the same stack level
-					context_environment = *((LispNodeRC **) saved_context_environment->data);
-					vm_pop();
+				if(tail_situation) {
+					// Complete the previous begins, then make a new one on the same stack level
+
+					for(auto i = 0; i < tail_begin_blocks_found; i++) {
+						const LispNodeRC &completed_begin = vm_peek();
+						const LispNodeRC &completed_begin_vm_state = completed_begin->head->next->item;
+						const LispNodeRC &saved_context_environment = completed_begin_vm_state->head->item;
+
+						context_environment = reinterpret_cast<LispNodeRC *>(saved_context_environment->data);
+						saved_context_environment->data = nullptr;
+
+						vm_pop();
+					}
 				}
 
 				vm_push(make3(make_operator(OP_VM_BEGIN), make3(list_empty, closure_mode == atom_true ? input->head->item : list_empty, atom_false), make2(new_expression, new_environment)));
@@ -1561,14 +1583,20 @@ void vm_step() {
 				data_pop();
 			}
 
+			bool last_item = (evaluation_items->head->next == nullptr);
+
 			// For tail-recursion
-			if(evaluation_items->head->next == nullptr) {
+			if(last_item) {
 				vm_pop();
 			}
 
 			vm_push(make3(make_operator(OP_VM_EVAL), list_empty, make2(make_car(evaluation_items), environment)));
-			evaluation_items = make_cdr(evaluation_items);
 
+			if(last_item) {
+				return;
+			}
+
+			evaluation_items = make_cdr(evaluation_items);
 			waiting = atom_true;
 
 			return;
