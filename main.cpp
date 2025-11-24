@@ -42,10 +42,8 @@ LispNodeRC eval_expression(LispNodeRC input, LispNodeRC environment);
 #ifdef SIMPLE_ALLOCATOR
 	#include "SimpleAllocator.h"
 
-	SimpleAllocator allocator;
-
-	#define Allocate allocator.allocate
-	#define Deallocate allocator.deallocate
+	#define Allocate SimpleAllocator::allocate
+	#define Deallocate SimpleAllocator::deallocate
 #else
 	#define Allocate malloc
 	#define Deallocate free
@@ -1613,6 +1611,10 @@ int main(int argc, char **argv) {
 #ifdef TARGET_6502
 	__set_heap_limit(LISP_HEAP_SIZE);
 #endif /* TARGET_6502 */
+
+#ifdef SIMPLE_ALLOCATOR
+	SimpleAllocator::init();
+#endif /* SIMPLE_ALLOCATOR */
 
 	// Setup global constants
 
