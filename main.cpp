@@ -1011,7 +1011,7 @@ bool eval_reduce(const LispNodeRC &input, const LispNodeRC &environment) {
 
 			case SpecialBegin:
 				// Special:
-				vm_push(make3(make_operator(OP_VM_BEGIN), make3(list_empty, list_empty, atom_false), make2(make_cdr(input), make_environment(environment))));
+				vm_push_operation(OP_VM_BEGIN, make3(list_empty, list_empty, atom_false),make_cdr(input), make_environment(environment));
 				return true;
 
 			case SpecialDefine:
@@ -1111,7 +1111,7 @@ void vm_step() {
 
 			vm_pop();
 
-			vm_push(make3(make_operator(OP_VM_CALL), vm_op_state, vm_op_arguments));
+			vm_push_operation(OP_VM_CALL, vm_op_state, input, environment);
 			vm_push_operation(OP_VM_EVAL_LIST, make2(atom_false, atom_false), make_cdr(input), environment);
 
 			return;
@@ -1670,6 +1670,10 @@ int main(int argc, char **argv) {
 		output->print();
 
 		fputs("\n", stdout);
+
+#ifdef SIMPLE_ALLOCATOR
+		SimpleAllocator::compress();
+#endif /* SIMPLE_ALLOCATOR */
 	}
 
 	fputs("\n", stdout);

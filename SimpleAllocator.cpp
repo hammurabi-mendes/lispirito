@@ -24,7 +24,13 @@ SimpleAllocator::Chunk::Chunk(uint8_t allocation_size) {
 	this->limit = data + (CHUNK_SIZE * allocation_size);
 
 	this->next = data;
+	this->number_free = CHUNK_SIZE;
+
 	this->next_chunk = nullptr;
+}
+
+SimpleAllocator::Chunk::~Chunk() {
+	free(this->start);
 }
 
 void SimpleAllocator::init() {
@@ -34,16 +40,7 @@ void SimpleAllocator::init() {
 }
 
 void SimpleAllocator::finish() {
-	for(auto i = 0; i < NUMBER_STANDARD_ALLOCATIONS; i++) {
-		Chunk *former_head;
-
-		while(chunks[i]) {
-			former_head = chunks[i];
-			chunks[i] = chunks[i]->next_chunk;
-
-			free(former_head);
-		}
-	}
+	compress(true);
 }
 
 void *SimpleAllocator::allocate(int size) {
@@ -71,7 +68,9 @@ void *SimpleAllocator::allocate(int size) {
 
 			// Allocate memory within the used chunk
 			void *result = used_chunk->next;
+
 			used_chunk->next = *((char **) result);
+			used_chunk->number_free--;
 
 			return result;
 		}
@@ -82,11 +81,14 @@ void *SimpleAllocator::allocate(int size) {
 
 void SimpleAllocator::deallocate(void *pointer) {
 	for(uint8_t i = 0; i < NUMBER_STANDARD_ALLOCATIONS; i++) {
+		// Try to find a chunk that contained the free space
 		for(Chunk *current = chunks[i]; current != nullptr; current = current->next_chunk) {
 			if(current->start <= pointer && pointer < current->limit) {
 				// Add the pointer back to the free list on the used chunk
 				*((char **) pointer) = current->next;
+
 				current->next = (char *) pointer;
+				current->number_free++;
 
 				return;
 			}
@@ -94,4 +96,31 @@ void SimpleAllocator::deallocate(void *pointer) {
 	}
 
 	free(pointer);
+}
+
+void SimpleAllocator::compress(bool delete_all) {
+	for(auto i = 0; i < NUMBER_STANDARD_ALLOCATIONS; i++) {
+		Chunk **last = &chunks[i];
+		Chunk *next_delete = nullptr;
+
+		for(Chunk *current = chunks[i]; current != nullptr; current = current->next_chunk) {
+			if(next_delete) {
+				delete next_delete;
+				next_delete = nullptr;
+			}
+
+			if(delete_all || current->number_free == CHUNK_SIZE) {
+				next_delete = current;
+
+				*last = current->next_chunk;
+			}
+			else {
+				last = &(current->next_chunk);
+			}
+		}
+
+		if(next_delete != nullptr) {
+			delete next_delete;
+		}
+	}
 }

@@ -18,8 +18,10 @@ class SimpleAllocator {
 		char *next;
 		char *start;
 		char *limit;
+		uint8_t number_free;
 
 		Chunk(uint8_t allocation_size);
+		~Chunk();
 
 		Chunk *next_chunk;
 	};
@@ -29,6 +31,8 @@ class SimpleAllocator {
 public:
 	static void init();
 	static void finish();
+
+	static void compress(bool delete_all = false);
 
 	static void *allocate(int size);
 	static void deallocate(void *pointer);
