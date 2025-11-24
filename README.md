@@ -7,7 +7,8 @@ A portable LISP implementation for memory-constrained systems. It works from MOS
 - Binary size smaller than 31.5K on MOS 6502 (on a minimal build), yet capable with modern architectures.
 - Macro expansion support for syntatic sugar.
 - Depend on a minimal set of `libc` functions.
-- The code should be small and pedagogical, *easy to understand*.
+- The code should be small, portable, and pedagogical, *easy to understand*.
+- The code prioritizes over performance the reduction of binary image and making evident the evaluator's [meta-circularity](https://studwww.itu.dk/~sestoft/boehmthesis/boehm.pdf) (for a practical discussion, see the famous [Structure and Interpretation of Computer Programs](https://mitp-content-server.mit.edu/books/content/sectbyfn/books_pres_0/6515/sicp.zip/index.html)).
 
 ## Supported features
 
@@ -35,7 +36,7 @@ If you compile with `INITIAL_ENVIRONMENT=1` (of if you download the "full" relea
   - Function application operator: `apply`
   - Scope and control operators: `if`, `let`
   
-Lambda definitions create *closures*, but we do not have tail-recursion support **yet**.
+Lambda definitions create *closures*, and `cond`, `and/or`, and `begin` are all tail-recursive (just make sure to recur in [tail-position](https://en.wikipedia.org/wiki/Tail_call)).
 
 ## Notably missing features
 
