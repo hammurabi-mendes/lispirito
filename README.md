@@ -8,7 +8,7 @@ A portable LISP implementation for memory-constrained systems. It works from MOS
 - Macro expansion support for syntatic sugar.
 - Depend on a minimal set of `libc` functions.
 - The code should be small, portable, and pedagogical, *easy to understand*.
-- The code prioritizes over performance the reduction of binary image and making evident the evaluator's [meta-circularity](https://studwww.itu.dk/~sestoft/boehmthesis/boehm.pdf) (for a practical discussion, see the famous [Structure and Interpretation of Computer Programs](https://mitp-content-server.mit.edu/books/content/sectbyfn/books_pres_0/6515/sicp.zip/index.html)).
+- The code prioritizes over performance the reduction of binary image and making evident the evaluator's meta-circular property.
 
 ## Supported features
 
