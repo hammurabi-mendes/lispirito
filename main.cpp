@@ -36,7 +36,7 @@ LispNodeRC data_stack;
 
 // Forward declarations
 char *read_expression();
-LispNodeRC parse_expression(char *buffer, bool deallocate_buffer);
+LispNodeRC parse_expression(const char *buffer, bool deallocate_buffer);
 LispNodeRC eval_expression(LispNodeRC input, LispNodeRC environment);
 
 #ifdef SIMPLE_ALLOCATOR
@@ -248,7 +248,7 @@ char *read_expression() {
 	return read_buffer;
 }
 
-char *get_next_token(char *buffer, size_t buffer_length, size_t &position) {
+char *get_next_token(const char *buffer, size_t buffer_length, size_t &position) {
 	static char result[MAX_TOKEN_SIZE];
 
 	// If buffer is exhausted, return null
@@ -407,7 +407,7 @@ LispNodeRC parse_atom(char *token) {
 	return result;
 }
 
-LispNodeRC parse_expression(char *buffer, size_t buffer_length, size_t &position, bool &error) {
+LispNodeRC parse_expression(const char *buffer, size_t buffer_length, size_t &position, bool &error) {
 	char *token = get_next_token(buffer, buffer_length, position);
 
 	if(token == nullptr) {
@@ -466,7 +466,7 @@ LispNodeRC parse_expression(char *buffer, size_t buffer_length, size_t &position
 	return parse_atom(token);
 }
 
-LispNodeRC parse_expression(char *buffer, bool deallocate_buffer = true) {
+LispNodeRC parse_expression(const char *buffer, bool deallocate_buffer = true) {
 	// Initial token position
 	size_t position = 0;
 
@@ -477,7 +477,7 @@ LispNodeRC parse_expression(char *buffer, bool deallocate_buffer = true) {
 
 	// Allocated in read_expression() and deallocated here
 	if(deallocate_buffer) {
-		Deallocate(buffer);
+		Deallocate(const_cast<char *>(buffer));
 	}
 
 	if(error == true) {
@@ -794,7 +794,7 @@ const LispNodeRC &eval_procedure(const LispNodeRC &input, const LispNodeRC &envi
 	if(count_members(input) < 3) {
 		print_error("lambda", "missing arguments\n");
 
-		return nullptr;
+		return list_empty;
 	}
 
 	const LispNodeRC &argument1 = input->head->next->item;
@@ -802,14 +802,14 @@ const LispNodeRC &eval_procedure(const LispNodeRC &input, const LispNodeRC &envi
 	if(!argument1->is_list()) {
 		print_error("lambda", "argument type error\n");
 
-		return nullptr;
+		return list_empty;
 	}
 
 	for(Box *current_parameter_box = argument1->get_head_pointer(); current_parameter_box != nullptr; current_parameter_box = current_parameter_box->get_next_pointer()) {
 		if(!current_parameter_box->item->is_atom() || !current_parameter_box->item->is_pure()) {
 			print_error("lambda", "argument type error\n");
 
-			return nullptr;
+			return list_empty;
 		}
 	}
 
@@ -825,7 +825,7 @@ const LispNodeRC &eval_macro(const LispNodeRC &input, const LispNodeRC &environm
 }
 
 LispNodeRC eval_lambda(const LispNodeRC &input, const LispNodeRC &environment) {
-	if(eval_procedure(input, environment) == nullptr) {
+	if(eval_procedure(input, environment) == list_empty) {
 		return nullptr;
 	}
 
@@ -1447,7 +1447,7 @@ void vm_step() {
 
 				if(type->number_i == OP_LOAD) {
 					int index;
-					char *value = nullptr;
+					const char *value = nullptr;
 
 					if((index = get_lambda_index(evaluated_symbol->data)) != -1) {
 						value = lambda_strings[index];

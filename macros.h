@@ -3,14 +3,14 @@
 
 constexpr int NUMBER_INITIAL_MACROS = 4;
 
-char *macro_names[] {
+const char *macro_names[] {
     "if",
     "let",
     "let*",
     "letrec"
 };
 
-char *macro_strings[] {
+const char *macro_strings[] {
 // if
 "(macro (test if_clause else_clause)"
 "    (cond (test if_clause) (#t else_clause))"

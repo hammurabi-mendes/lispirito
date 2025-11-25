@@ -100,27 +100,27 @@ void SimpleAllocator::deallocate(void *pointer) {
 
 void SimpleAllocator::compress(bool delete_all) {
 	for(auto i = 0; i < NUMBER_STANDARD_ALLOCATIONS; i++) {
-		Chunk **last = &chunks[i];
-		Chunk *next_delete = nullptr;
+		Chunk **pnext_chunk = &chunks[i];
+		Chunk *chunk_to_delete = nullptr;
 
 		for(Chunk *current = chunks[i]; current != nullptr; current = current->next_chunk) {
-			if(next_delete) {
-				delete next_delete;
-				next_delete = nullptr;
+			if(chunk_to_delete != nullptr) {
+				delete chunk_to_delete;
+				chunk_to_delete = nullptr;
 			}
 
 			if(delete_all || current->number_free == CHUNK_SIZE) {
-				next_delete = current;
+				chunk_to_delete = current;
 
-				*last = current->next_chunk;
+				*pnext_chunk = current->next_chunk;
 			}
 			else {
-				last = &(current->next_chunk);
+				pnext_chunk = &(current->next_chunk);
 			}
 		}
 
-		if(next_delete != nullptr) {
-			delete next_delete;
+		if(chunk_to_delete != nullptr) {
+			delete chunk_to_delete;
 		}
 	}
 }

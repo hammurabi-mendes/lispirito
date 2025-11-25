@@ -3,7 +3,7 @@
 
 constexpr int NUMBER_INITIAL_LAMBDAS = 23;
 
-char *lambda_names[] {
+const char *lambda_names[] {
     "nil?",
     "map",
     "foldl",
@@ -30,7 +30,7 @@ char *lambda_names[] {
     "assoc-delete"
 };
 
-char *lambda_strings[] {
+const char *lambda_strings[] {
 // nil?
 "(lambda (param) (eq? param '()))",
 // map
