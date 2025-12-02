@@ -103,14 +103,22 @@ void *SimpleAllocator::allocate(int size, AllocationIndex allocation_index) {
 				continue;
 			}
 
-			for(auto i = 0; i < CHUNK_SIZE; i++) {
-				if(!BITMAP_GET(current->bitmap, i)) {
-					BITMAP_SET_ON(current->bitmap, i);
+			for(size_t offset_bitmap = 0; offset_bitmap < CHUNK_SIZE / 8; offset_bitmap++) {
+				if(current->bitmap[offset_bitmap] == (char) 0xff) {
+					continue;
+				}
 
-					number_available[current->allocation_index]--;
-					current->number_available--;
+				for(size_t offset_byte = 0; offset_byte < 8; offset_byte++) {
+					int i = (offset_bitmap * 8) + offset_byte;
 
-					return reinterpret_cast<void *>(current->data + (i * STANDARD_ALLOCATIONS[current->allocation_index]));
+					if(!BITMAP_GET(current->bitmap, i)) {
+						BITMAP_SET_ON(current->bitmap, i);
+
+						number_available[current->allocation_index]--;
+						current->number_available--;
+
+						return reinterpret_cast<void *>(current->data + (i * STANDARD_ALLOCATIONS[current->allocation_index]));
+					}
 				}
 			}
 		}
