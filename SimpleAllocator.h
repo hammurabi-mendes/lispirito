@@ -4,38 +4,25 @@
 #include "types.h"
 #include "LispNode.h"
 
-class SimpleAllocator {
-	static constexpr uint8_t NUMBER_STANDARD_ALLOCATIONS = 2;
+enum AllocationIndex : uint8_t {
+	IndexLispNode = 0,
+	IndexBox = 1,
+	IndexGeneric = 2
+};
 
-	static constexpr uint8_t STANDARD_ALLOCATIONS[NUMBER_STANDARD_ALLOCATIONS] = {
-		(sizeof(LispNode) + sizeof(CounterType)),
-		(sizeof(Box) + sizeof(CounterType))
-	};
-
-	static constexpr uint8_t CHUNK_SIZE = 128;
-
-	struct Chunk {
-		char *next;
-		char *start;
-		char *limit;
-		uint8_t number_free;
-
-		Chunk(uint8_t allocation_size);
-		~Chunk();
-
-		Chunk *next_chunk;
-	};
-
-	static Chunk *chunks[NUMBER_STANDARD_ALLOCATIONS];
-
-public:
+struct SimpleAllocator {
 	static void init();
 	static void finish();
 
-	static void compress(bool delete_all = false);
-
-	static void *allocate(int size);
+	static void *allocate(int size, AllocationIndex allocation_index = IndexGeneric);
 	static void deallocate(void *pointer);
+
+	// Mark-and-sweep GC functions
+
+	static void setup();
+	static void set_mark(void *pointer);
+	static bool get_mark(void *pointer);
+	static void commit();
 };
 
 #endif /* SIMPLE_ALLOCATOR_H */

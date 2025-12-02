@@ -42,6 +42,11 @@ public:
 	LispNode(LispType type);
 	~LispNode();
 
+#ifdef SIMPLE_ALLOCATOR
+	static void *operator new(size_t size);
+	static void operator delete(void *pointer) noexcept;
+#endif /* SIMPLE_ALLOCATOR */
+
 	static LispNode *make_data(LispType type, void *data);
 	static LispNode *make_integer(Integral number_i);
 	static LispNode *make_real(Integral number_i);
@@ -85,6 +90,11 @@ public:
 struct Box {
 	LispNodeRC item;
 	BoxRC next;
+
+#ifdef SIMPLE_ALLOCATOR
+	static void *operator new(size_t size);
+	static void operator delete(void *pointer) noexcept;
+#endif /* SIMPLE_ALLOCATOR */
 
 	Box(const LispNodeRC &item);
 

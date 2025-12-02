@@ -13,10 +13,33 @@ LispNode::~LispNode() {
 		}
 	}
 
+	// Forces the deletion of all elements in the list if REFERENCE_COUNTING is defined
 	if(type == LispType::List) {
 		head = nullptr;
 	}
 }
+
+#ifdef SIMPLE_ALLOCATOR
+void *LispNode::operator new(size_t size) {
+#ifdef REFERENCE_COUNTING
+	CounterType *pointer = (CounterType *) Allocate(size + sizeof(CounterType), AllocationIndex::IndexLispNode);
+
+	*pointer = 0;
+
+	return pointer + 1;
+#else
+	return Allocate(size, AllocationIndex::IndexLispNode);
+#endif /* REFERENCE_COUNTING */
+}
+
+void LispNode::operator delete(void *pointer) noexcept {
+#ifdef REFERENCE_COUNTING
+	Deallocate(((CounterType *) pointer) - 1);
+#else
+	return Deallocate(pointer);
+#endif /* REFERENCE_COUNTING */
+}
+#endif /* SIMPLE_ALLOCATOR */
 
 LispNode *LispNode::make_data(LispType type, void *data) {
 	LispNode *result = new LispNode(type);
@@ -291,4 +314,27 @@ void LispNode::print() const {
 	}
 }
 
-Box::Box(const LispNodeRC &item): item{item} {}
+Box::Box(const LispNodeRC &item): item{item} {
+}
+
+#ifdef SIMPLE_ALLOCATOR
+void *Box::operator new(size_t size) {
+#ifdef REFERENCE_COUNTING
+	CounterType *pointer = (CounterType *) Allocate(size + sizeof(CounterType), AllocationIndex::IndexBox);
+
+	*pointer = 0;
+
+	return pointer + 1;
+#else
+	return Allocate(size, AllocationIndex::IndexBox);
+#endif /* REFERENCE_COUNTING */
+}
+
+void Box::operator delete(void *pointer) noexcept {
+#ifdef REFERENCE_COUNTING
+	Deallocate(((CounterType *) pointer) - 1);
+#else
+	return Deallocate(pointer);
+#endif /* REFERENCE_COUNTING */
+}
+#endif /* SIMPLE_ALLOCATOR */

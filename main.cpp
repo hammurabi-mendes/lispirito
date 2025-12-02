@@ -49,6 +49,8 @@ LispNodeRC eval_expression(LispNodeRC input, LispNodeRC environment);
 	#define Deallocate free
 #endif /* SIMPLE_ALLOCATOR */
 
+#ifdef REFERENCE_COUNTING
+	#ifndef SIMPLE_ALLOCATOR
 void *operator new(size_t size) {
 	CounterType *pointer = (CounterType *) Allocate(size + sizeof(CounterType));
 
@@ -60,6 +62,8 @@ void *operator new(size_t size) {
 void operator delete(void *pointer) noexcept {
 	Deallocate(((CounterType *) pointer) - 1);
 }
+	#endif /* !SIMPLE_ALLOCATOR */
+#endif /* REFERENCE_COUNTING */
 
 // Utility functions
 
@@ -346,8 +350,6 @@ int examine_string(char *token) {
 LispNodeRC parse_atom(char *token) {
 	int output = examine_string(token);
 
-	LispNode *result = new LispNode(LispType::AtomPure);
-
 	// Try first true and false literals
 
 	if(strcmp(token, "#t") == 0) {
@@ -357,6 +359,8 @@ LispNodeRC parse_atom(char *token) {
 	if(strcmp(token, "#f") == 0) {
 		return atom_false;	
 	}
+
+	LispNode *result = new LispNode(LispType::AtomPure);
 
 	if(output & PARSE_CHARACTER) {
 		result->type = LispType::AtomCharacter;
@@ -1592,6 +1596,24 @@ void vm_step() {
 	}
 }
 
+#ifdef SIMPLE_ALLOCATOR
+void mark_used(LispNode *current_node) {
+	if(SimpleAllocator::get_mark(current_node)) {
+		return;
+	}
+
+	SimpleAllocator::set_mark(current_node);
+
+	if(current_node->type == LispType::List) {
+		for(Box *current_box = current_node->get_head_pointer(); current_box != nullptr; current_box = current_box->get_next_pointer()) {
+			SimpleAllocator::set_mark(current_box);
+
+			mark_used(current_box->item.get_pointer());
+		}
+	}
+}
+#endif /* SIMPLE_ALLOCATOR */
+
 LispNodeRC eval_expression(const LispNodeRC input, const LispNodeRC environment) {
 	vm_reset();
 	vm_push_operation(OP_VM_EVAL, list_empty, input, environment);
@@ -1635,10 +1657,11 @@ int main(int argc, char **argv) {
 
 	while(true) {
 #ifdef TARGET_6502
-		fputs("free: ", stdout);
+		fputs("* free: ", stdout);
 		print_integral(__heap_bytes_free());
 		fputs("\n", stdout);
 #endif /* TARGET_6502 */
+
 		fputs("> ", stdout);
 
 		char *input_string = read_expression();
@@ -1671,8 +1694,33 @@ int main(int argc, char **argv) {
 
 		fputs("\n", stdout);
 
+		input = nullptr;
+		output = nullptr;
+		vm_finish();
+
 #ifdef SIMPLE_ALLOCATOR
-		SimpleAllocator::compress();
+#ifdef TARGET_6502
+		fputs("* cleaning up... ", stdout);
+#endif /* TARGET_6502 */
+
+		SimpleAllocator::setup();
+
+		mark_used(atom_true.get_pointer());
+		mark_used(atom_false.get_pointer());
+		mark_used(list_empty.get_pointer());
+
+		mark_used(global_environment.get_pointer());
+		mark_used(evaluation_stack.get_pointer());
+		mark_used(data_stack.get_pointer());
+
+		mark_used(input.get_pointer());
+		mark_used(output.get_pointer());
+
+		SimpleAllocator::commit();
+
+#ifdef TARGET_6502
+		fputs("done\n", stdout);
+#endif /* TARGET_6502 */
 #endif /* SIMPLE_ALLOCATOR */
 	}
 

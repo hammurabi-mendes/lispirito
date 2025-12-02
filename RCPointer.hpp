@@ -72,7 +72,9 @@ public:
     }
 
     ~RCPointer() {
+#ifdef REFERENCE_COUNTING
         set(nullptr);
+#endif /* REFERENCE_COUNTING */
     }
 
     T &operator*() const { return *pointer; }
@@ -83,6 +85,7 @@ public:
     }
 
 private:
+#ifdef REFERENCE_COUNTING
     void set(T *pointer_new) noexcept {
         if(pointer_new) {
             CounterType *reference_counter_new = ((CounterType *) pointer_new) - 1;
@@ -100,6 +103,11 @@ private:
 
         pointer = pointer_new;
     }
+#else
+    inline void set(T *pointer_new) noexcept {
+        pointer = pointer_new;
+    }
+#endif /* REFERENCE_COUNTING */
 };
 
 #endif /* RCPOINTER_HPP */
