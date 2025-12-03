@@ -17,15 +17,23 @@ static constexpr uint8_t STANDARD_ALLOCATIONS[NUMBER_STANDARD_ALLOCATIONS] = {
 };
 #endif /* REFERENCE_COUNTING */
 
-inline void destruct_lispnode(void *pointer) {
-	reinterpret_cast<LispNode *>(pointer)->~LispNode();
-}
-
-inline void destruct_box(void *pointer) {
-	reinterpret_cast<Box *>(pointer)->~Box();
-}
-
 static constexpr uint8_t CHUNK_SIZE = 128;
+
+struct Chunk {
+	char *next;
+	char *start;
+	char *limit;
+	uint8_t number_free;
+	AllocationIndex allocation_index;
+
+	char bitmap[CHUNK_SIZE / 8];
+	char bitmap2[CHUNK_SIZE / 8];
+
+	Chunk(AllocationIndex allocation_index);
+	~Chunk();
+
+	Chunk *next_chunk;
+};
 
 void BITMAP_CLEAR(char *bitmap) {
 	for(auto i = 0; i < CHUNK_SIZE / 8; i++) {
@@ -45,157 +53,195 @@ void BITMAP_SET_OFF(char *bitmap, uint8_t offset) {
 	bitmap[(offset) / 8] &= ~(1U << ((offset) % 8));
 }
 
-struct Chunk {
-	AllocationIndex allocation_index;
-	unsigned int number_available;
+static Chunk *chunks[NUMBER_STANDARD_ALLOCATIONS];
 
-	char bitmap[CHUNK_SIZE / 8];
-	char bitmap2[CHUNK_SIZE / 8];
-	char *data;
-	char *limit;
-
-	Chunk *next;
-
-	Chunk(AllocationIndex allocation_index, char *data, Chunk *next);
-};
-
-Chunk::Chunk(AllocationIndex allocation_index, char *data, Chunk *next): allocation_index{allocation_index}, data{data}, next{next} {
-	limit = data + (CHUNK_SIZE * STANDARD_ALLOCATIONS[allocation_index]);
-	number_available = CHUNK_SIZE;
-
-	BITMAP_CLEAR(bitmap);
+int find_position(Chunk *chunk, void *pointer) {
+	return (reinterpret_cast<char *>(pointer) - chunk->start) / STANDARD_ALLOCATIONS[chunk->allocation_index];
 }
 
-static Chunk *head;
-unsigned int number_available[NUMBER_STANDARD_ALLOCATIONS];
+Chunk *find_chunk(void *pointer, int *position) {
+	for(uint8_t i = 0; i < NUMBER_STANDARD_ALLOCATIONS; i++) {
+		for(Chunk *current = chunks[i]; current != nullptr; current = current->next_chunk) {
+			if(current->start <= pointer && pointer < current->limit) {
+				if(position != nullptr) {
+					*position = find_position(current, pointer);
+				}
+
+				return current;
+			}
+		}
+	}
+
+	return nullptr;
+}
+
+inline void destruct_lispnode(void *pointer) {
+	reinterpret_cast<LispNode *>(pointer)->~LispNode();
+}
+
+inline void destruct_box(void *pointer) {
+	reinterpret_cast<Box *>(pointer)->~Box();
+}
+
+Chunk::Chunk(AllocationIndex allocation_index): allocation_index{allocation_index} {
+	int allocation_size = STANDARD_ALLOCATIONS[allocation_index];
+
+	char *data = (char *) malloc(CHUNK_SIZE * allocation_size);
+
+	char *position_curr = data;
+	char *position_next = data + allocation_size;
+
+	for(int i = 0; i < CHUNK_SIZE - 1; i++) {
+		*((char **) position_curr) = position_next;
+
+		position_curr = position_next;
+		position_next += allocation_size;
+	}
+
+	*((char **) position_curr) = nullptr;
+
+	this->start = data;
+	this->limit = data + (CHUNK_SIZE * allocation_size);
+
+	this->next = data;
+	this->number_free = CHUNK_SIZE;
+
+	this->next_chunk = nullptr;
+
+	BITMAP_CLEAR(this->bitmap);
+}
+
+Chunk::~Chunk() {
+	free(this->start);
+}
 
 void SimpleAllocator::init() {
-	head = nullptr;
-
-	for(auto i = 0; i < NUMBER_STANDARD_ALLOCATIONS; i++) {
-		number_available[i] = 0;
-	}
+	chunks[0] = new Chunk(AllocationIndex::IndexLispNode);
+	chunks[1] = new Chunk(AllocationIndex::IndexBox);
 }
 
 void SimpleAllocator::finish() {
-	Chunk *previous_head;
+	Chunk *previous_chunk;
 
-	while(head) {
-		previous_head = head;
-		head = head->next;
+	for(uint8_t i = 0; i < NUMBER_STANDARD_ALLOCATIONS; i++) {
+		while(chunks[i]) {
+			previous_chunk = chunks[i];
+			chunks[i] = chunks[i]->next_chunk;
 
-		free(previous_head);
+			delete previous_chunk;
+		}
 	}
 }
 
 void *SimpleAllocator::allocate(int size, AllocationIndex allocation_index) {
 	if(allocation_index < AllocationIndex::IndexGeneric) {
-		if(number_available[allocation_index] == 0) {
-			char *chunk_block = (char *) malloc(sizeof(Chunk) + (CHUNK_SIZE * STANDARD_ALLOCATIONS[allocation_index]));
+		Chunk *used_chunk = nullptr;
 
-			head = new(chunk_block) Chunk(allocation_index, (chunk_block + sizeof(Chunk)), head);
-
-			number_available[allocation_index] += CHUNK_SIZE;
-		}
-
-		for(Chunk *current = head; current != nullptr; current = current->next) {
-			if(current->allocation_index != allocation_index) {
-				continue;
-			}
-
-			for(size_t offset_bitmap = 0; offset_bitmap < CHUNK_SIZE / 8; offset_bitmap++) {
-				if(current->bitmap[offset_bitmap] == (char) 0xff) {
-					continue;
-				}
-
-				for(size_t offset_byte = 0; offset_byte < 8; offset_byte++) {
-					int i = (offset_bitmap * 8) + offset_byte;
-
-					if(!BITMAP_GET(current->bitmap, i)) {
-						BITMAP_SET_ON(current->bitmap, i);
-
-						number_available[current->allocation_index]--;
-						current->number_available--;
-
-						return reinterpret_cast<void *>(current->data + (i * STANDARD_ALLOCATIONS[current->allocation_index]));
-					}
-				}
+		// Try to find a chunk with free space
+		for(Chunk *current = chunks[allocation_index]; current != nullptr; current = current->next_chunk) {
+			if(current->next != nullptr) {
+				used_chunk = current;
+				break;
 			}
 		}
+
+		// If a chunk is not found, allocate one and use it
+		if(used_chunk == nullptr) {
+			Chunk *new_chunk = new Chunk(allocation_index);
+
+			new_chunk->next_chunk = chunks[allocation_index];
+			chunks[allocation_index] = new_chunk;
+
+			used_chunk = new_chunk;
+		}
+
+		// Allocate memory within the used chunk
+		void *result = used_chunk->next;
+
+		used_chunk->next = *((char **) result);
+		used_chunk->number_free--;
+
+		BITMAP_SET_ON(used_chunk->bitmap, find_position(used_chunk, result));
+		return result;
 	}
 
 	return malloc(size);
 }
 
-void do_deallocate(Chunk *chunk, int position) {
+void do_deallocate(Chunk *chunk, void *pointer, int position) {
 	BITMAP_SET_OFF(chunk->bitmap, position);
 
-	number_available[chunk->allocation_index]++;
-	chunk->number_available++;
+	// Add the pointer back to the free list on the used chunk
+	*((char **) pointer) = chunk->next;
+
+	chunk->next = (char *) pointer;
+	chunk->number_free++;
 }
 
 void SimpleAllocator::deallocate(void *pointer) {
-	for(Chunk *current = head; current != nullptr; current = current->next) {
-		if(pointer >= current->data && pointer < current->limit) {
-			int position = (reinterpret_cast<char *>(pointer) - current->data) / STANDARD_ALLOCATIONS[current->allocation_index];
+	Chunk *chunk;
+	int position;
 
-			// The conditional is necessary because if we have reference counting
-			// we must avoid dealocating an object twice when we start deallocating via mark-and-sweep
-			if(BITMAP_GET(current->bitmap, position)) {
-				do_deallocate(current, position);
-			}
-
-			return;
+	if((chunk = find_chunk(pointer, &position))) {
+		if(BITMAP_GET(chunk->bitmap, position)) {
+			do_deallocate(chunk, pointer, position);
 		}
+
+		return;
 	}
 
 	free(pointer);
 }
 
 void SimpleAllocator::setup() {
-	for(Chunk *current = head; current != nullptr; current = current->next) {
-		BITMAP_CLEAR(current->bitmap2);
+	for(uint8_t i = 0; i < NUMBER_STANDARD_ALLOCATIONS; i++) {
+		for(Chunk *current = chunks[i]; current != nullptr; current = current->next_chunk) {
+			BITMAP_CLEAR(current->bitmap2);
+		}
 	}
 }
 
 void SimpleAllocator::set_mark(void *pointer) {
+	Chunk *chunk;
+	int position;
+
 #ifdef REFERENCE_COUNTING
 	pointer = reinterpret_cast<char *>(pointer) - sizeof(CounterType);
 #endif /* REFERENCE_COUNTING */
 
-	for(Chunk *current = head; current != nullptr; current = current->next) {
-		if(pointer >= current->data && pointer < current->limit) {
-			int position = (reinterpret_cast<char *>(pointer) - current->data) / STANDARD_ALLOCATIONS[current->allocation_index];
-
-			BITMAP_SET_ON(current->bitmap2, position);
-		}
+	if((chunk = find_chunk(pointer, &position))) {
+		BITMAP_SET_ON(chunk->bitmap2, position);
 	}
 }
 
 bool SimpleAllocator::get_mark(void *pointer) {
+	Chunk *chunk;
+	int position;
+
 #ifdef REFERENCE_COUNTING
 	pointer = reinterpret_cast<char *>(pointer) - sizeof(CounterType);
 #endif /* REFERENCE_COUNTING */
 
-	for(Chunk *current = head; current != nullptr; current = current->next) {
-		if(pointer >= current->data && pointer < current->limit) {
-			int position = (reinterpret_cast<char *>(pointer) - current->data) / STANDARD_ALLOCATIONS[current->allocation_index];
-
-			return BITMAP_GET(current->bitmap2, position);
-		}
+	if((chunk = find_chunk(pointer, &position))) {
+		return BITMAP_GET(chunk->bitmap2, position);
 	}
 
 	return true;
 }
 
 void SimpleAllocator::commit() {
-	for(Chunk *current = head; current != nullptr; current = current->next) {
-		for(auto i = 0; i < CHUNK_SIZE; i++) {
-			if(BITMAP_GET(current->bitmap, i) && !BITMAP_GET(current->bitmap2, i)) {
+	for(uint8_t i = 0; i < NUMBER_STANDARD_ALLOCATIONS; i++) {
+		for(Chunk *current = chunks[i]; current != nullptr; current = current->next_chunk) {
+			for(size_t position = 0; position < CHUNK_SIZE; position++) {
+				if(!BITMAP_GET(current->bitmap, i) || BITMAP_GET(current->bitmap2, i)) {
+					continue;
+				}
+
+				void *pointer = current->start + (position * STANDARD_ALLOCATIONS[current->allocation_index]);
 #ifdef REFERENCE_COUNTING
-				void *object_location = current->data + (i * STANDARD_ALLOCATIONS[current->allocation_index]) + sizeof(CounterType);
+				void *object_location = reinterpret_cast<char *>(pointer) + sizeof(CounterType);
 #else
-				void *object_location = current->data + (i * STANDARD_ALLOCATIONS[current->allocation_index]);
+				void *object_location = pointer;
 #endif /* REFERENCE_COUNTING */
 
 				if(current->allocation_index == 0) {
@@ -207,7 +253,7 @@ void SimpleAllocator::commit() {
 					destruct_box(object_location);
 				}
 
-				do_deallocate(current, i);
+				do_deallocate(current, pointer, position);
 			}
 		}
 	}
