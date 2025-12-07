@@ -30,10 +30,6 @@ LispNodeRC global_environment;
 // Environment to modify upon defines (only changed upon begin statements)
 LispNodeRC *context_environment;
 
-// VM stacks used for controlling evaluation and storing results
-LispNodeRC evaluation_stack;
-LispNodeRC data_stack;
-
 // Forward declarations
 char *read_expression();
 LispNodeRC parse_expression(const char *buffer, bool deallocate_buffer);
@@ -493,7 +489,7 @@ LispNodeRC parse_expression(const char *buffer, bool deallocate_buffer = true) {
 
 // Helper functions
 
-size_t count_members(const LispNodeRC &list) {
+unsigned int count_members(const LispNodeRC &list) {
 	size_t count = 0;
 
 	for(Box *current_box = list->get_head_pointer(); current_box != nullptr; current_box = current_box->get_next_pointer()) {
@@ -912,40 +908,160 @@ LispNodeRC make_lambda_application(const LispNodeRC &input, const LispNodeRC &en
 
 // VM functions
 
-inline void vm_push(const LispNodeRC &node) {
-    evaluation_stack = make_cons(node, evaluation_stack);
+struct VMStackFrame {
+	int op;
+	LispNodeRC input;
+	LispNodeRC environment;
+
+	union State {
+		struct Apply {
+			bool closure_mode;
+			bool waiting;
+			unsigned int arity;
+
+			Apply(bool closure_mode, bool waiting, unsigned int arity): closure_mode{closure_mode}, waiting{waiting}, arity{arity} {}
+		} apply;
+
+		struct First {
+			bool waiting;
+
+			First(bool waiting): waiting{waiting} {}
+		} first;
+
+		struct Normal {
+			unsigned int arity;
+
+			Normal(unsigned int arity): arity{arity} {}
+		} normal;
+
+		struct Quote {
+			Quote() {}
+		} quote;
+
+		struct Cond {
+			bool waiting;
+
+			Cond(bool waiting): waiting{waiting} {}
+		} cond;
+
+		struct Logic {
+			int type;
+			bool waiting;
+
+			Logic(int type, bool waiting): type{type}, waiting{waiting} {}
+		} logic;
+
+		struct Define {
+			int type;
+			bool waiting;
+
+			Define(int type, bool waiting): type{type}, waiting{waiting} {}
+		} define;
+
+		struct Begin {
+			bool waiting;
+			const LispNode *current_closure;
+			LispNodeRC *saved_context_environment;
+
+			Begin(bool waiting, const LispNode *current_closure, LispNodeRC *saved_context_environment): waiting{waiting}, current_closure{current_closure}, saved_context_environment{saved_context_environment} {}
+		} begin;
+
+		struct Eval {
+			Eval() {}
+		} eval;
+
+		struct Load {
+			int type;
+			bool waiting;
+
+			Load(int type, bool waiting): type{type}, waiting{waiting} {}
+		} load;
+
+		struct Call {
+			unsigned int arity;
+
+			Call(unsigned int arity): arity{arity} {}
+		} call;
+
+		struct EvalList {
+			bool discard_intermediary;
+			bool waiting;
+
+			EvalList(bool discard_intermediary, bool waiting): discard_intermediary{discard_intermediary}, waiting{waiting} {}
+		} eval_list;
+
+		State(): apply{false, false, 0} {}
+
+		~State() {
+		}
+
+		State(const Apply &apply): apply{apply} {}
+		State(const First &first): first{first} {}
+		State(const Normal &normal): normal{normal} {}
+		State(const Quote &quote): quote{quote} {}
+		State(const Cond &cond): cond{cond} {}
+		State(const Logic &logic): logic{logic} {}
+		State(const Define &define): define{define} {}
+		State(const Begin &begin): begin{begin} {}
+		State(const Eval &eval): eval{eval} {}
+		State(const Load &load): load{load} {}
+		State(const Call &call): call{call} {}
+		State(const EvalList &eval_list): eval_list{eval_list} {}
+	} vm_state;
+
+	VMStackFrame(): op(0), input(nullptr), environment(nullptr), vm_state{State(State::Eval())} {}
+	VMStackFrame(int op, const LispNodeRC &input, const LispNodeRC &environment, const State &vm_state): op(op), input(input), environment(environment), vm_state{vm_state} {}
+
+	~VMStackFrame() {}
+};
+
+using VMState = VMStackFrame::State;
+
+constexpr int EVALUATION_STACK_SIZE = 96;
+constexpr int DATA_STACK_SIZE = 32;
+
+VMStackFrame *evaluation_stack = new VMStackFrame[EVALUATION_STACK_SIZE];
+LispNodeRC *data_stack = new LispNodeRC[DATA_STACK_SIZE];
+
+unsigned int vm_top = 0;
+unsigned int data_top = 0;
+
+void vm_push_operation(int op, const LispNodeRC &input, const LispNodeRC &environment, const VMState &state) {
+	evaluation_stack[vm_top].op = op;
+	evaluation_stack[vm_top].input = input;
+	evaluation_stack[vm_top].environment = environment;
+	evaluation_stack[vm_top].vm_state = state;
+
+	vm_top++;
 }
 
-inline void vm_push_operation(int op, const LispNodeRC &state, const LispNodeRC &input, const LispNodeRC &environment) {
-    vm_push(make3(make_operator(op), state, make2(input, environment)));
-}
-
-inline const LispNodeRC &vm_peek() {
-	return evaluation_stack->head->item;
+inline VMStackFrame &vm_peek() {
+	return evaluation_stack[vm_top - 1];
 }
 
 inline void vm_pop() {
-	evaluation_stack = make_cdr(evaluation_stack);
+	vm_top--;
 }
 
 inline void data_push(const LispNodeRC &node) {
-    data_stack = make_cons(node, data_stack);
+	data_stack[data_top] = node;
+	data_top++;
 }
 
 inline LispNodeRC &data_peek() {
-	return data_stack->head->item;
+	return data_stack[data_top - 1];
 }
 
 inline void data_pop() {
-    data_stack = make_cdr(data_stack);
+	data_top--;
 }
 
 // I want to differentiate reset and finish, but for now they work the same way
 #define vm_finish vm_reset
 
 void vm_reset() {
-	evaluation_stack = list_empty;
-	data_stack = list_empty;
+	vm_top = 0;
+	data_top = 0;
 
 	context_environment = &global_environment;
 }
@@ -982,17 +1098,17 @@ bool eval_reduce(const LispNodeRC &input, const LispNodeRC &environment) {
 	if(first->is_operator()) {
 		// First try one of the predefined operators
 		int operation_index = first->number_i;
-		int operation_reduce_mode = operation_index >= 0 ? operator_reduce_modes[first->number_i] : Unspecified;
+		ReduceMode operation_reduce_mode = operation_index >= 0 ? operator_reduce_modes[first->number_i] : Unspecified;
 
 		switch(operation_reduce_mode) {
 			case SpecialQuote:
 				// Special: does not evaluate
-				vm_push_operation(OP_VM_QUOTE, list_empty, input, environment);
+				vm_push_operation(OP_VM_QUOTE, input, environment, VMState::Quote{});
 				return true;
 
 			case SpecialCond:
 				// Special:
-				vm_push_operation(OP_VM_COND, atom_false, make_cdr(input), environment);
+				vm_push_operation(OP_VM_COND, make_cdr(input), environment, VMState::Cond{false});
 				return true;
 
 			case Normal0:
@@ -1000,31 +1116,31 @@ bool eval_reduce(const LispNodeRC &input, const LispNodeRC &environment) {
 			case Normal2:
 			case Normal3:
 				// Normal:
-				vm_push_operation(OP_VM_NORMAL, LispNode::make_integer(operation_reduce_mode - Normal0), input, environment);
+				vm_push_operation(OP_VM_NORMAL, input, environment, VMState::Normal{(unsigned int) (operation_reduce_mode - Normal0)});
 				return true;
 
 			case SpecialLoad:
 				// Special:
-				vm_push_operation(OP_VM_LOAD, make2(LispNode::make_integer(operation_index), atom_false), input, environment);
+				vm_push_operation(OP_VM_LOAD, input, environment, VMState::Load{operation_index, false});
 				return true;
 
 			case SpecialLogic:
 				// Special:
-				vm_push_operation(OP_VM_LOGIC, make2(LispNode::make_integer(operation_index), atom_false), make_cdr(input), environment);
+				vm_push_operation(OP_VM_LOGIC, make_cdr(input), environment, VMState::Logic{operation_index, false});
 				return true;
 
 			case SpecialBegin:
 				// Special:
-				vm_push_operation(OP_VM_BEGIN, make3(list_empty, list_empty, atom_false),make_cdr(input), make_environment(environment));
+				vm_push_operation(OP_VM_BEGIN, make_cdr(input), make_environment(environment), VMState::Begin{false, nullptr, nullptr});
 				return true;
 
 			case SpecialDefine:
 				// Special:
-				vm_push_operation(OP_VM_DEFINE, make2(LispNode::make_integer(operation_index), atom_false), input, environment);
+				vm_push_operation(OP_VM_DEFINE, input, environment, VMState::Define{operation_index, false});
 				return true;
 
 			case SpecialEval:
-				vm_push_operation(OP_VM_EVAL, list_empty, input, environment);
+				vm_push_operation(OP_VM_EVAL, input, environment, VMState::Eval{});
 				return true;
 
 			case ImmediateLambda:
@@ -1041,8 +1157,13 @@ bool eval_reduce(const LispNodeRC &input, const LispNodeRC &environment) {
 
 			case NormalX:
 				// Normal:
-				vm_push_operation(OP_VM_NORMAL, LispNode::make_integer(count_members(input) - 1), input, environment);
+				vm_push_operation(OP_VM_NORMAL, input, environment, VMState::Normal{count_members(input) - 1});
 				return true;
+			
+			default:
+				print_integral(operation_reduce_mode);
+				print_error(" at eval_reduce()", "unknown reduce requested\n");
+				vm_finish();
 		}
 	}
 
@@ -1054,12 +1175,12 @@ bool eval_reduce(const LispNodeRC &input, const LispNodeRC &environment) {
 	bool is_macro = first->is_operation(OP_MACRO);
 
 	if(is_closure || is_macro) {
-		vm_push_operation(OP_VM_APPLY, make3(LispNode::make_integer(count_members(input) - 1), is_closure ? atom_true : atom_false, atom_false), input, environment);
+		vm_push_operation(OP_VM_APPLY, input, environment, VMState::Apply{is_closure, false, count_members(input) - 1});
 		return true;
 	}
 
 	if((first->is_atom() && first->is_pure()) || first->is_list()) {
-		vm_push_operation(OP_VM_FIRST, atom_false, input, environment);
+		vm_push_operation(OP_VM_FIRST, input, environment, VMState::First{false});
 		return true;
 	}
 
@@ -1070,43 +1191,40 @@ bool eval_reduce(const LispNodeRC &input, const LispNodeRC &environment) {
 }
 
 void vm_step() {
-	// Create another reference to the top of the evaluation stack,
-	// so the data it points to is still valid after we pop from it
-	LispNodeRC top = vm_peek();
+	VMStackFrame &top = vm_peek();
 
-	const LispNodeRC &vm_op = top->head->item;
-	LispNodeRC &vm_op_state = top->head->next->item;
-	const LispNodeRC &vm_op_arguments = top->head->next->next->item;
+	// Reference, because we typically modify state
+	VMState &vm_state = top.vm_state;
 
-	const LispNodeRC &input = vm_op_arguments->head->item;
-	const LispNodeRC &environment = vm_op_arguments->head->next->item;
+	LispNodeRC input = top.input;
+	LispNodeRC environment = top.environment;
 
-	int operation_index = vm_op->number_i;
+	int operation_index = top.op;
 
 	switch(operation_index) {
 		// (vm-first <waiting> (input environment))
 		case OP_VM_FIRST: {
-			LispNodeRC &waiting = vm_op_state;
+			bool &waiting = vm_state.first.waiting;
 
-			if(waiting == atom_false) {
-				vm_push_operation(OP_VM_EVAL, list_empty, input->head->item, environment);
-				waiting = atom_true;
+			if(waiting == false) {
+				vm_push_operation(OP_VM_EVAL, input->head->item, environment, VMState::Eval{});
+				waiting = true;
 			}
 			else {
 				LispNodeRC result = data_peek();
 				data_pop();
 
 				vm_pop();
-				vm_push_operation(OP_VM_EVAL, list_empty, make_cons(result, make_cdr(input)), environment);
+				vm_push_operation(OP_VM_EVAL, make_cons(result, make_cdr(input)), environment, VMState::Eval{});
 			}
 
 			return;
 		}
 		// (vm-normal <arity> (input environment))
 		case OP_VM_NORMAL: {
-			LispNodeRC &arity = vm_op_state;
+			unsigned int arity = vm_state.normal.arity;
 
-			if(count_members(input) != arity->number_i + 1) {
+			if(count_members(input) != arity + 1) {
 				print_error(input->head->item->data, "missing or extra arguments\n");
 				vm_finish();
 
@@ -1115,8 +1233,8 @@ void vm_step() {
 
 			vm_pop();
 
-			vm_push_operation(OP_VM_CALL, vm_op_state, input, environment);
-			vm_push_operation(OP_VM_EVAL_LIST, make2(atom_false, atom_false), make_cdr(input), environment);
+			vm_push_operation(OP_VM_CALL, input, environment, VMState::Call{arity});
+			vm_push_operation(OP_VM_EVAL_LIST, make_cdr(input), environment, VMState::EvalList{false, false});
 
 			return;
 		}
@@ -1138,12 +1256,11 @@ void vm_step() {
 		}
 		// (vm-cond <waiting> ([(t1 c1) ... (tN cN)] environment))
 		case OP_VM_COND: {
-			LispNodeRC &waiting = vm_op_state;
+			LispNodeRC &evaluation_pairs = top.input;
 
-			LispNodeRC &evaluation_pairs = vm_op_arguments->head->item;
-			const LispNodeRC &environment = vm_op_arguments->head->next->item;
+			bool &waiting = vm_state.cond.waiting;
 
-			if(waiting == atom_false && evaluation_pairs == list_empty) {
+			if(waiting == false && evaluation_pairs == list_empty) {
 				vm_pop();
 				data_push(list_empty);
 
@@ -1153,9 +1270,9 @@ void vm_step() {
 			const LispNodeRC &current_pair = evaluation_pairs->head->item;
 			const LispNodeRC &current_test = current_pair->head->item;
 
-			if(waiting == atom_false) {
-				vm_push_operation(OP_VM_EVAL, list_empty, current_test, environment);
-				waiting = atom_true;
+			if(waiting == false) {
+				vm_push_operation(OP_VM_EVAL, current_test, environment, VMState::Eval{});
+				waiting = true;
 			}
 			else {
 				LispNodeRC result = data_peek();
@@ -1165,51 +1282,50 @@ void vm_step() {
 					vm_pop();
 
 					if(current_pair->get_head_pointer()->get_next_pointer()->get_next_pointer() == nullptr) {
-						const LispNodeRC &current_consequent = current_pair->head->next->item;
+						LispNodeRC current_consequent = current_pair->head->next->item;
 
-						vm_push_operation(OP_VM_EVAL, list_empty, current_consequent, environment);
+						vm_push_operation(OP_VM_EVAL, current_consequent, environment, VMState::Eval{});
 					}
 					else {
 						// The consequent is a sequence of operations
 						LispNodeRC current_consequent = LispNode::make_list(current_pair->get_head_pointer()->get_next_pointer());
 
-						vm_push_operation(OP_VM_BEGIN, make3(list_empty, list_empty, atom_false), current_consequent, environment);
+						vm_push_operation(OP_VM_BEGIN, current_consequent, environment, VMState::Begin{false, nullptr, nullptr});
 					}
 
 					return;
 				}
 
 				evaluation_pairs = make_cdr(evaluation_pairs);
-				waiting = atom_false;
+				waiting = false;
 			}
 
 			return;
 		}
 		// (vm-logic (<OP_AND/OP_OR> <waiting>) (evaluation_items environment))
 		case OP_VM_LOGIC: {
-			const LispNodeRC &type = vm_op_state->head->item;
-			LispNodeRC &waiting = vm_op_state->head->next->item;
+			LispNodeRC &evaluation_items = top.input;
 
-			LispNodeRC &evaluation_items = vm_op_arguments->head->item;
-			const LispNodeRC &environment = vm_op_arguments->head->next->item;
+			int type = vm_state.logic.type;
+			bool &waiting = vm_state.logic.waiting;
 
 			if(evaluation_items == list_empty) {
 				vm_pop();
 
-				if(type->number_i == OP_AND) {
+				if(type == OP_AND) {
 					data_push(atom_true);
 				}
 
-				if(type->number_i == OP_OR) {
+				if(type == OP_OR) {
 					data_push(atom_false);
 				}
 
 				return;
 			}
 
-			if(waiting == atom_false) {
-				vm_push_operation(OP_VM_EVAL, list_empty, evaluation_items->head->item, environment);
-				waiting = atom_true;
+			if(waiting == false) {
+				vm_push_operation(OP_VM_EVAL, evaluation_items->head->item, environment, VMState::Eval{});
+				waiting = true;
 
 				return;
 			}
@@ -1217,13 +1333,13 @@ void vm_step() {
 			LispNodeRC result = data_peek();
 			data_pop();
 
-			if(type->number_i == OP_AND && result == atom_false) {
+			if(type == OP_AND && result == atom_false) {
 				vm_pop();
 				data_push(atom_false);
 
 				return;
 			}
-			if(type->number_i == OP_OR && result == atom_true) {
+			if(type == OP_OR && result == atom_true) {
 				vm_pop();
 				data_push(atom_true);
 
@@ -1237,24 +1353,21 @@ void vm_step() {
 				vm_pop();
 			}
 
-			vm_push_operation(OP_VM_EVAL, list_empty, evaluation_items->head->item, environment);
+			vm_push_operation(OP_VM_EVAL, evaluation_items->head->item, environment, VMState::Eval{});
 
 			if(last_item) {
 				return;
 			}
 
 			evaluation_items = make_cdr(evaluation_items);
-			waiting = atom_false;
+			waiting = false;
 
 			return;
 		}
 		// (vm-define (<OP_DEFINE/OP_SET_E> <waiting>) (input environment))
 		case OP_VM_DEFINE: {
-			const LispNodeRC &type = vm_op_state->head->item;
-			LispNodeRC &waiting = vm_op_state->head->next->item;
-
-			const LispNodeRC &input = vm_op_arguments->head->item;
-			const LispNodeRC &environment = vm_op_arguments->head->next->item;
+			int type = vm_state.define.type;
+			bool &waiting = vm_state.define.waiting;
 
 			const LispNodeRC &operation = input->head->item;
 			const LispNodeRC &argument1 = input->head->next->item;
@@ -1264,7 +1377,7 @@ void vm_step() {
 
 			LispNodeRC symbol = is_define_lambda ? make_car(argument1) : input->head->next->item;
 
-			if(waiting == atom_false) {
+			if(waiting == false) {
 				if(count_members(input) < 3) {
 					print_error(input->head->item->data, "missing arguments\n");
 					vm_finish();
@@ -1280,7 +1393,7 @@ void vm_step() {
 				}
 
 				// Extend the frame on environments
-				if(type->number_i == OP_DEFINE) {
+				if(type == OP_DEFINE) {
 					*context_environment = make_cons(make2(symbol, list_empty), environment);;
 				}
 
@@ -1293,8 +1406,8 @@ void vm_step() {
 					expression = make_cons(make_operator(OP_LAMBDA), make_cons(lambda_parameters, lambda_expression));
 				}
 
-				vm_push_operation(OP_VM_EVAL, list_empty, expression, *context_environment);
-				waiting = atom_true;
+				vm_push_operation(OP_VM_EVAL, expression, *context_environment, VMState::Eval{});
+				waiting = true;
 			}
 			else {
 				LispNodeRC evaluated_expression = data_peek();
@@ -1310,23 +1423,19 @@ void vm_step() {
 		}
 		// (vm-begin (<saved_context_environment> <current_closure> <waiting>) (evaluation_items environment))
 		case OP_VM_BEGIN: {
-			LispNodeRC &saved_context_environment = vm_op_state->head->item;
-			const LispNodeRC &current_closure = vm_op_state->head->next->item;
-			LispNodeRC &waiting = vm_op_state->head->next->next->item;
+			LispNodeRC *&saved_context_environment = vm_state.begin.saved_context_environment;
+			const LispNode *current_closure = vm_state.begin.current_closure;
+			bool &waiting = vm_state.begin.waiting;
 
-			if(waiting == atom_false) {
-				// Get a non-const reference to the new environment
-				LispNodeRC &new_environment = vm_op_arguments->head->next->item;
+			if(waiting == false) {
+				saved_context_environment = context_environment;
+				context_environment = &top.environment;
 
-				saved_context_environment = LispNode::make_data(LispType::AtomData, context_environment);
-				context_environment = &new_environment;
-
-				vm_push_operation(OP_VM_EVAL_LIST, make2(atom_true, atom_false), vm_op_arguments->head->item, vm_op_arguments->head->next->item);
-				waiting = atom_true;
+				vm_push_operation(OP_VM_EVAL_LIST, input, environment, VMState::EvalList{true, false});
+				waiting = true;
 			}
 			else {
-				context_environment = reinterpret_cast<LispNodeRC *>(saved_context_environment->data);
-				saved_context_environment->data = nullptr;
+				context_environment = saved_context_environment;
 
 				vm_pop();
 			}
@@ -1335,19 +1444,19 @@ void vm_step() {
 		}
 		// (vm-apply (<arity> <closure_mode> <waiting>) (input environment))
 		case OP_VM_APPLY: {
-			const LispNodeRC &arity = vm_op_state->head->item;
-			const LispNodeRC &closure_mode = vm_op_state->head->next->item;
-			LispNodeRC &waiting = vm_op_state->head->next->next->item;
+			unsigned int arity = vm_state.apply.arity;
+			bool closure_mode = vm_state.apply.closure_mode;
+			bool &waiting = vm_state.apply.waiting;
 
-			if(waiting == atom_false && closure_mode == atom_true) {
-				vm_push_operation(OP_VM_EVAL_LIST, make2(atom_false, atom_false), make_cdr(input), environment);
-				waiting = atom_true;
+			if(waiting == false && closure_mode == true) {
+				vm_push_operation(OP_VM_EVAL_LIST, make_cdr(input), environment, VMState::EvalList{false, false});
+				waiting = true;
 			}
 			else {
 				LispNodeRC evaluated_input = list_empty;
 
-				if(closure_mode == atom_true) {
-					for(size_t i = 0; i < arity->number_i; i++) {
+				if(closure_mode == true) {
+					for(unsigned int i = 0; i < arity; i++) {
 						evaluated_input = make_cons(data_peek(), evaluated_input);
 						data_pop();
 					}
@@ -1360,18 +1469,16 @@ void vm_step() {
 				unsigned int tail_begin_blocks_found = 0;
 
 				// Check for tail-recursion
-				if(evaluation_stack->head->next != nullptr) {
-					for(Box *current_box = evaluation_stack->get_head_pointer()->get_next_pointer(); current_box != nullptr; current_box = current_box->get_next_pointer()) {
-						const LispNodeRC &vm_next = current_box->item;
-						const LispNodeRC &vm_next_op = vm_next->head->item;
+				if(vm_top >= 2) {
+					for(int i = vm_top - 2; i >= 0; i--) {
+						const VMStackFrame &vm_next = evaluation_stack[i];
 
-						if(vm_next_op->number_i == OP_VM_BEGIN) {
+						if(vm_next.op == OP_VM_BEGIN) {
 							tail_begin_blocks_found++;
 
-							const LispNodeRC &vm_next_op_state = vm_next->head->next->item;
-							const LispNodeRC &current_closure = vm_next_op_state->head->next->item;
+							const LispNode *current_closure = vm_next.vm_state.begin.current_closure;
 
-							if(current_closure == input->head->item) {
+							if(current_closure == input->head->item.get_pointer()) {
 								tail_situation = true;
 								break;
 							}
@@ -1382,7 +1489,7 @@ void vm_step() {
 					}
 				}
 
-				LispNodeRC lambda_application = make_lambda_application(closure_mode == atom_true ? evaluated_input : input, environment);
+				LispNodeRC lambda_application = make_lambda_application(closure_mode ? evaluated_input : input, environment);
 
 				if(lambda_application == nullptr) {
 					// Error message printed in the make_lambda_application() function
@@ -1399,18 +1506,15 @@ void vm_step() {
 					// Complete the previous begins, then make a new one on the same stack level
 
 					for(size_t i = 0; i < tail_begin_blocks_found; i++) {
-						const LispNodeRC &completed_begin = vm_peek();
-						const LispNodeRC &completed_begin_vm_state = completed_begin->head->next->item;
-						const LispNodeRC &saved_context_environment = completed_begin_vm_state->head->item;
+						VMStackFrame &completed_begin = vm_peek();
 
-						context_environment = reinterpret_cast<LispNodeRC *>(saved_context_environment->data);
-						saved_context_environment->data = nullptr;
+						context_environment = completed_begin.vm_state.begin.saved_context_environment;
 
 						vm_pop();
 					}
 				}
 
-				vm_push_operation(OP_VM_BEGIN, make3(list_empty, closure_mode == atom_true ? input->head->item : list_empty, atom_false), new_expression, new_environment);
+				vm_push_operation(OP_VM_BEGIN, new_expression, new_environment, VMState::Begin{false, closure_mode ? input->head->item.get_pointer() : nullptr, nullptr});
 			}
 
 			return;
@@ -1428,10 +1532,10 @@ void vm_step() {
 		// (vm-load (<type>, <waiting>) (input environment))
 		case OP_VM_LOAD: {
 #ifdef INITIAL_ENVIRONMENT
-			const LispNodeRC &type = vm_op_state->head->item;
-			LispNodeRC &waiting = vm_op_state->head->next->item;
+			int type = vm_state.load.type;
+			bool &waiting = vm_state.load.waiting;
 
-			if(waiting == atom_false) {
+			if(waiting == false) {
 				if(count_members(input) != 2) {
 					print_error(input->head->item->data, "missing or extra arguments\n");
 					vm_finish();
@@ -1441,15 +1545,15 @@ void vm_step() {
 
 				const LispNodeRC &symbol = input->head->next->item;
 
-				vm_push_operation(OP_VM_EVAL, list_empty, symbol, environment);
+				vm_push_operation(OP_VM_EVAL, symbol, environment, VMState::Eval{});
 
-				waiting = atom_true;
+				waiting = true;
 			}
 			else {
 				LispNodeRC evaluated_symbol = data_peek();
 				data_pop();
 
-				if(type->number_i == OP_LOAD) {
+				if(type == OP_LOAD) {
 					int index;
 					const char *value = nullptr;
 
@@ -1464,13 +1568,13 @@ void vm_step() {
 					LispNodeRC load_expression = make3(make_operator(OP_DEFINE), evaluated_symbol, parse_expression(value, false));
 
 					vm_pop();
-					vm_push_operation(OP_VM_EVAL, list_empty, load_expression, environment);
+					vm_push_operation(OP_VM_EVAL, load_expression, environment, VMState::Eval{});
 				}
 				else {
 					LispNodeRC unload_expression = make3(make_operator(OP_SET_E), evaluated_symbol, atom_false);
 
 					vm_pop();
-					vm_push_operation(OP_VM_EVAL, list_empty, input, environment);
+					vm_push_operation(OP_VM_EVAL, input, environment, VMState::Eval{});
 				}
 			}
 #else
@@ -1482,7 +1586,7 @@ void vm_step() {
 		}
 		// (vm-call <arity> (input environment))
 		case OP_VM_CALL: {
-			LispNodeRC &arity = vm_op_state;
+			unsigned int arity = vm_state.call.arity;
 
 			LispNodeRC evaluated_input = list_empty;
 
@@ -1501,7 +1605,7 @@ void vm_step() {
 			}
 
 			// If it is an apply operation, we already collected one evaluated input
-			int to_collect = (is_apply ? arity->number_i - 1 : arity->number_i);
+			int to_collect = (is_apply ? arity - 1 : arity);
 
 			for(size_t i = 0; i < to_collect; i++) {
 				evaluated_input = make_cons(data_peek(), evaluated_input);
@@ -1512,7 +1616,7 @@ void vm_step() {
 			// already been added
 			if(is_apply) {
 				vm_pop();
-				vm_push_operation(OP_VM_EVAL, list_empty, evaluated_input, environment);
+				vm_push_operation(OP_VM_EVAL, evaluated_input, environment, VMState::Eval{});
 
 				return;
 			}
@@ -1522,7 +1626,7 @@ void vm_step() {
 
 			LispNodeRC result;
 
-			switch(arity->number_i) {
+			switch(arity) {
 				case 0:
 					result = eval_gen0(evaluated_input, environment);
 					break;
@@ -1551,11 +1655,10 @@ void vm_step() {
 		}
 		// (vm-eval-list (<discard-itermediary> <waiting>) (evaluation_items environment))
 		case OP_VM_EVAL_LIST: {
-			const LispNodeRC &discard_intermediary = vm_op_state->head->item;
-			LispNodeRC &waiting = vm_op_state->head->next->item;
+			LispNodeRC &evaluation_items = top.input;
 
-			LispNodeRC &evaluation_items = vm_op_arguments->head->item;
-			const LispNodeRC &environment = vm_op_arguments->head->next->item;
+			bool discard_intermediary = vm_state.eval_list.discard_intermediary;
+			bool &waiting = vm_state.eval_list.waiting;
 
 			if(evaluation_items == list_empty) {
 				vm_pop();
@@ -1565,7 +1668,7 @@ void vm_step() {
 			}
 
 			// If we are working in a begin operator
-			if(waiting == atom_true && discard_intermediary == atom_true) {
+			if(waiting == true && discard_intermediary == true) {
 				data_pop();
 			}
 
@@ -1576,19 +1679,19 @@ void vm_step() {
 				vm_pop();
 			}
 
-			vm_push_operation(OP_VM_EVAL, list_empty, make_car(evaluation_items), environment);
+			vm_push_operation(OP_VM_EVAL, make_car(evaluation_items), environment, VMState::Eval{});
 
 			if(last_item) {
 				return;
 			}
 
 			evaluation_items = make_cdr(evaluation_items);
-			waiting = atom_true;
+			waiting = true;
 
 			return;
 		}
 		default:
-			top->print();
+			print_integral(top.op);
 			print_error(" at vm_step()", "unknown operation\n");
 			vm_finish();
 
@@ -1616,13 +1719,13 @@ void mark_used(LispNode *current_node) {
 
 LispNodeRC eval_expression(const LispNodeRC input, const LispNodeRC environment) {
 	vm_reset();
-	vm_push_operation(OP_VM_EVAL, list_empty, input, environment);
+	vm_push_operation(OP_VM_EVAL, input, environment, VMState::Eval{});
 
-	while(evaluation_stack != list_empty) {
+	while(vm_top > 0) {
 		vm_step();
 	}
 
-	if(data_stack == list_empty) {
+	if(data_top == 0) {
 		return nullptr;
 	}
 
@@ -1696,6 +1799,16 @@ int main(int argc, char **argv) {
 
 		input = nullptr;
 		output = nullptr;
+
+		for(unsigned int i = 0; i < EVALUATION_STACK_SIZE; i++) {
+			evaluation_stack[i].input = list_empty;
+			evaluation_stack[i].environment = list_empty;
+		}
+
+		for(unsigned int i = 0; i < DATA_STACK_SIZE; i++) {
+			data_stack[i] = list_empty;
+		}
+
 		vm_finish();
 
 #ifdef SIMPLE_ALLOCATOR
@@ -1710,8 +1823,6 @@ int main(int argc, char **argv) {
 		mark_used(list_empty.get_pointer());
 
 		mark_used(global_environment.get_pointer());
-		mark_used(evaluation_stack.get_pointer());
-		mark_used(data_stack.get_pointer());
 
 		mark_used(input.get_pointer());
 		mark_used(output.get_pointer());

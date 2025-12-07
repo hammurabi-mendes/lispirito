@@ -71,6 +71,10 @@ public:
         return (pointer == nullptr);
     }
 
+    bool operator!=(std::nullptr_t) const {
+        return (pointer != nullptr);
+    }
+
     ~RCPointer() {
 #ifdef REFERENCE_COUNTING
         set(nullptr);

@@ -233,7 +233,7 @@ void SimpleAllocator::commit() {
 	for(uint8_t i = 0; i < NUMBER_STANDARD_ALLOCATIONS; i++) {
 		for(Chunk *current = chunks[i]; current != nullptr; current = current->next_chunk) {
 			for(size_t position = 0; position < CHUNK_SIZE; position++) {
-				if(!BITMAP_GET(current->bitmap, i) || BITMAP_GET(current->bitmap2, i)) {
+				if(!BITMAP_GET(current->bitmap, position) || BITMAP_GET(current->bitmap2, position)) {
 					continue;
 				}
 
