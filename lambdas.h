@@ -4,7 +4,6 @@
 constexpr int NUMBER_INITIAL_LAMBDAS = 23;
 
 const char *lambda_names[] {
-    "nil?",
     "map",
     "foldl",
     "foldr",
@@ -31,33 +30,31 @@ const char *lambda_names[] {
 };
 
 const char *lambda_strings[] {
-// nil?
-"(lambda (param) (eq? param '()))",
 // map
 "(lambda (func lst)"
 "    (cond"
-"        ((nil? lst) '())"
+"        ((null? lst) '())"
 "        (#t (cons (func (car lst)) (map func (cdr lst))))"
 "    )"
 ")",
 // foldl
 "(lambda (binfunc acc lst)"
 "    (cond"
-"        ((eq? lst '()) acc)"
+"        ((null? lst) acc)"
 "        (#t (foldl binfunc (binfunc (car lst) acc) (cdr lst)))"
 "    )"
 ")",
 // foldr
 "(lambda (binfunc acc lst)"
 "    (cond"
-"        ((eq? lst '()) acc)"
+"        ((null? lst) acc)"
 "        (#t (binfunc (car lst) (foldr binfunc acc (cdr lst))))"
 "    )"
 ")",
 // filter
 "(lambda (pred lst)"
 "    (cond"
-"        ((eq? lst '()) '())"
+"        ((null? lst) '())"
 "        ((pred (car lst)) (cons (car lst) (filter pred (cdr lst))))"
 "        (#t (filter pred (cdr lst)))"
 "    )"
@@ -73,7 +70,7 @@ const char *lambda_strings[] {
 // flatten
 "(lambda (lst)"
 "    (cond"
-"        ((eq? lst '()) '())"
+"        ((null? lst) '())"
 "        ((atom? (car lst)) (cons (car lst) (flatten (cdr lst))))"
 "        (#t (append (flatten (car lst)) (flatten (cdr lst))))"
 "    )"
@@ -82,7 +79,7 @@ const char *lambda_strings[] {
 "(lambda (input)"
 "    (cond"
 "        ((atom? input) #f)"
-"        ((eq? input '()) #t)"
+"        ((null? input) #t)"
 "        (#t (list? (cdr input)))"
 "    )"
 ")",

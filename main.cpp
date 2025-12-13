@@ -542,8 +542,10 @@ LispNodeRC eval_gen1(const LispNodeRC &input, const LispNodeRC &environment) {
 			return make_cdr(output1);
 		case OP_ATOM_Q:
 			return output1->is_atom() ? atom_true : atom_false;
+		case OP_NULL_Q:
+			return (output1 == list_empty) ? atom_true : atom_false;
 		case OP_PAIR_Q:
-			return (output1->is_atom() || output1 == list_empty) ? atom_false : atom_true;
+			return (output1->is_list() && output1 != list_empty) ? atom_true : atom_false;
 		case OP_CHAR_Q:
 			return output1->is_character() ? atom_true : atom_false;
 		case OP_BOOLEAN_Q:
@@ -1429,9 +1431,10 @@ void vm_step() {
 
 			if(waiting == false) {
 				saved_context_environment = context_environment;
-				context_environment = &top.environment;
 
 				vm_push_operation(OP_VM_EVAL_LIST, input, environment, VMState::EvalList{true, false});
+				context_environment = &(vm_peek().environment);
+
 				waiting = true;
 			}
 			else {

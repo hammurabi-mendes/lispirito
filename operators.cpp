@@ -15,6 +15,7 @@ const char *operator_names[] = {
     "subst",
 
     // Type support
+    "null?",
     "pair?",
     "char?",
     "boolean?",
@@ -108,6 +109,7 @@ ReduceMode operator_reduce_modes[] = {
     Normal3,
 
     // Type support
+    Normal1,
     Normal1,
     Normal1,
     Normal1,
