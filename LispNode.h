@@ -97,6 +97,7 @@ struct Box {
 #endif /* SIMPLE_ALLOCATOR */
 
 	Box(const LispNodeRC &item);
+	Box(const LispNodeRC &item, const BoxRC &next);
 
 	Box *get_next_pointer() const {
 		return next.get_pointer();

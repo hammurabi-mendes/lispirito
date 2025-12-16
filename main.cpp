@@ -1213,11 +1213,17 @@ void vm_step() {
 				waiting = true;
 			}
 			else {
-				LispNodeRC result = data_peek();
-				data_pop();
+				if(data_peek() != input->head->item) {
+					LispNodeRC result = data_peek();
+					data_pop();
 
-				vm_pop();
-				vm_push_operation(OP_VM_EVAL, make_cons(result, make_cdr(input)), environment, VMState::Eval{});
+					vm_pop();
+					vm_push_operation(OP_VM_EVAL, make_cons(result, make_cdr(input)), environment, VMState::Eval{});
+				}
+				else {
+					vm_pop();
+					vm_push_operation(OP_VM_EVAL, input, environment, VMState::Eval{});
+				}
 			}
 
 			return;
@@ -1377,7 +1383,7 @@ void vm_step() {
 
 			bool is_define_lambda = argument1->is_list();
 
-			LispNodeRC symbol = is_define_lambda ? make_car(argument1) : input->head->next->item;
+			LispNodeRC symbol = is_define_lambda ? argument1->head->item : input->head->next->item;
 
 			if(waiting == false) {
 				if(count_members(input) < 3) {
@@ -1610,14 +1616,18 @@ void vm_step() {
 			// If it is an apply operation, we already collected one evaluated input
 			int to_collect = (is_apply ? arity - 1 : arity);
 
+			BoxRC evaluated_parameter_sequence = nullptr;
+
 			for(size_t i = 0; i < to_collect; i++) {
-				evaluated_input = make_cons(data_peek(), evaluated_input);
+				evaluated_parameter_sequence = new Box(data_peek(), evaluated_parameter_sequence);
 				data_pop();
 			}
 
 			// If it is an apply operation, the first input is the operation and it has
 			// already been added
 			if(is_apply) {
+				evaluated_input = LispNode::make_list(evaluated_parameter_sequence.get_pointer());
+
 				vm_pop();
 				vm_push_operation(OP_VM_EVAL, evaluated_input, environment, VMState::Eval{});
 
@@ -1625,7 +1635,8 @@ void vm_step() {
 			}
 
 			// Add the original operator to the front of the evaluated arguments
-			evaluated_input = make_cons(input->head->item, evaluated_input);
+			Box *evaluated_input_sequence = new Box(input->head->item, evaluated_parameter_sequence);
+			evaluated_input = LispNode::make_list(evaluated_input_sequence);
 
 			LispNodeRC result;
 

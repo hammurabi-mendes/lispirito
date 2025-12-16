@@ -317,6 +317,9 @@ void LispNode::print() const {
 Box::Box(const LispNodeRC &item): item{item} {
 }
 
+Box::Box(const LispNodeRC &item, const BoxRC &next): item{item}, next{next} {
+}
+
 #ifdef SIMPLE_ALLOCATOR
 void *Box::operator new(size_t size) {
 #ifdef REFERENCE_COUNTING
