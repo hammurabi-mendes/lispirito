@@ -914,6 +914,7 @@ struct VMStackFrame {
 	int op;
 	LispNodeRC input;
 	LispNodeRC environment;
+	LispNodeRC extra1;
 
 	union State {
 		struct Apply {
@@ -962,10 +963,9 @@ struct VMStackFrame {
 
 		struct Begin {
 			bool waiting;
-			const LispNode *current_closure;
 			LispNodeRC *saved_context_environment;
 
-			Begin(bool waiting, const LispNode *current_closure, LispNodeRC *saved_context_environment): waiting{waiting}, current_closure{current_closure}, saved_context_environment{saved_context_environment} {}
+			Begin(bool waiting, LispNodeRC *saved_context_environment): waiting{waiting}, saved_context_environment{saved_context_environment} {}
 		} begin;
 
 		struct Eval {
@@ -1133,7 +1133,7 @@ bool eval_reduce(const LispNodeRC &input, const LispNodeRC &environment) {
 
 			case SpecialBegin:
 				// Special:
-				vm_push_operation(OP_VM_BEGIN, make_cdr(input), make_environment(environment), VMState::Begin{false, nullptr, nullptr});
+				vm_push_operation(OP_VM_BEGIN, make_cdr(input), make_environment(environment), VMState::Begin{false, nullptr});
 				return true;
 
 			case SpecialDefine:
@@ -1292,7 +1292,7 @@ void vm_step() {
 						// The consequent is a sequence of operations
 						LispNodeRC current_consequent = LispNode::make_list(current_pair->get_head_pointer()->get_next_pointer());
 
-						vm_push_operation(OP_VM_BEGIN, current_consequent, environment, VMState::Begin{false, nullptr, nullptr});
+						vm_push_operation(OP_VM_BEGIN, current_consequent, environment, VMState::Begin{false, nullptr});
 					}
 
 					return;
@@ -1425,9 +1425,8 @@ void vm_step() {
 		}
 		// (vm-begin (<saved_context_environment> <current_closure> <waiting>) (evaluation_items environment))
 		case OP_VM_BEGIN: {
-			LispNodeRC *&saved_context_environment = vm_state.begin.saved_context_environment;
-			const LispNode *current_closure = vm_state.begin.current_closure;
 			bool &waiting = vm_state.begin.waiting;
+			LispNodeRC *&saved_context_environment = vm_state.begin.saved_context_environment;
 
 			if(waiting == false) {
 				saved_context_environment = context_environment;
@@ -1479,9 +1478,9 @@ void vm_step() {
 						if(vm_next.op == OP_VM_BEGIN) {
 							tail_begin_blocks_found++;
 
-							const LispNode *current_closure = vm_next.vm_state.begin.current_closure;
+							const LispNodeRC current_closure = vm_next.extra1;
 
-							if(current_closure == input->head->item.get_pointer()) {
+							if(current_closure == input->head->item) {
 								tail_situation = true;
 								break;
 							}
@@ -1517,7 +1516,8 @@ void vm_step() {
 					}
 				}
 
-				vm_push_operation(OP_VM_BEGIN, new_expression, new_environment, VMState::Begin{false, closure_mode ? input->head->item.get_pointer() : nullptr, nullptr});
+				vm_push_operation(OP_VM_BEGIN, new_expression, new_environment, VMState::Begin{false, nullptr});
+				vm_peek().extra1 = closure_mode ? input->head->item.get_pointer() : nullptr;
 			}
 
 			return;
@@ -1806,6 +1806,7 @@ int main(int argc, char **argv) {
 		for(unsigned int i = 0; i < EVALUATION_STACK_SIZE; i++) {
 			evaluation_stack[i].input = list_empty;
 			evaluation_stack[i].environment = list_empty;
+			evaluation_stack[i].extra1 = list_empty;
 		}
 
 		for(unsigned int i = 0; i < DATA_STACK_SIZE; i++) {
