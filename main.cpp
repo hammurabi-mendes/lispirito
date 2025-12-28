@@ -831,15 +831,21 @@ LispNodeRC eval_lambda(const LispNodeRC &input, const LispNodeRC &environment) {
 		return nullptr;
 	}
 
-	return make_cons(make_operator(OP_CLOSURE), make2(input, environment));
+	return make3(make_operator(OP_CLOSURE), input, environment);
 }
 
+#ifndef SEPARATE_FRAMES
+inline const LispNodeRC &make_environment(const LispNodeRC &environment) {
+	return environment;
+}
+#else
 LispNodeRC make_environment(const LispNodeRC &environment) {
 	// Creates an environment with a dummy entry to separate frames
 	LispNodeRC new_environment = make_cons(make2(atom_false, atom_false), environment);
 
 	return new_environment;
 }
+#endif /* SEPARATE_FRAMES */
 
 LispNodeRC make_lambda_application(const LispNodeRC &input, const LispNodeRC &environment) {
 	const LispNodeRC &closure_or_macro = input->head->item;
@@ -860,7 +866,7 @@ LispNodeRC make_lambda_application(const LispNodeRC &input, const LispNodeRC &en
 	LispNodeRC new_expression = LispNode::make_list(procedure->get_head_pointer()->get_next_pointer()->get_next_pointer());
 	// Used when is_macro == #f:
 	//     Eager evaluation: creates a new environment binding parameters to their eagerly-evaluated arguments
-	LispNodeRC new_environment = (operator_index == OP_CLOSURE ? make_environment(closure_or_macro->head->next->next->item) : environment);
+	LispNodeRC new_environment = (is_closure ? make_environment(closure_or_macro->head->next->next->item) : environment);
 
 	bool packed_dot = false;
 
@@ -908,7 +914,7 @@ LispNodeRC make_lambda_application(const LispNodeRC &input, const LispNodeRC &en
 	return make2(new_expression, new_environment);
 }
 
-// VM functions
+// VM data structures, variables and functions
 
 struct VMStackFrame {
 	int op;
@@ -1022,11 +1028,11 @@ using VMState = VMStackFrame::State;
 constexpr int EVALUATION_STACK_SIZE = 96;
 constexpr int DATA_STACK_SIZE = 32;
 
-VMStackFrame *evaluation_stack = new VMStackFrame[EVALUATION_STACK_SIZE];
-LispNodeRC *data_stack = new LispNodeRC[DATA_STACK_SIZE];
+VMStackFrame *evaluation_stack;
+LispNodeRC *data_stack;
 
-unsigned int vm_top = 0;
-unsigned int data_top = 0;
+unsigned int vm_top;
+unsigned int data_top;
 
 void vm_push_operation(int op, const LispNodeRC &input, const LispNodeRC &environment, const VMState &state) {
 	evaluation_stack[vm_top].op = op;
@@ -1213,10 +1219,9 @@ void vm_step() {
 				waiting = true;
 			}
 			else {
-				if(data_peek() != input->head->item) {
-					LispNodeRC result = data_peek();
-					data_pop();
+				const LispNodeRC &result = data_peek();
 
+				if(result != input->head->item) {
 					vm_pop();
 					vm_push_operation(OP_VM_EVAL, make_cons(result, make_cdr(input)), environment, VMState::Eval{});
 				}
@@ -1224,6 +1229,8 @@ void vm_step() {
 					vm_pop();
 					vm_push_operation(OP_VM_EVAL, input, environment, VMState::Eval{});
 				}
+
+				data_pop();
 			}
 
 			return;
@@ -1418,10 +1425,10 @@ void vm_step() {
 				waiting = true;
 			}
 			else {
-				LispNodeRC evaluated_expression = data_peek();
-				data_pop();
+				const LispNodeRC &evaluated_expression = data_peek();
 
 				make_query_optional_replace(symbol, *context_environment, evaluated_expression);
+				data_pop();
 
 				vm_pop();
 				data_push(list_empty);
@@ -1736,6 +1743,18 @@ LispNodeRC eval_expression(const LispNodeRC input, const LispNodeRC environment)
 	vm_push_operation(OP_VM_EVAL, input, environment, VMState::Eval{});
 
 	while(vm_top > 0) {
+		if(vm_top > EVALUATION_STACK_SIZE) {
+			fputs("Eval stack overflow; try using tail-recursion", stdout);
+
+			return nullptr;
+		}
+
+		if(data_top > DATA_STACK_SIZE) {
+			fputs("Data stack overflow; try using tail-recursion", stdout);
+
+			return nullptr;
+		}
+
 		vm_step();
 	}
 
@@ -1769,6 +1788,12 @@ int main(int argc, char **argv) {
 	// Setup global environment
 
 	global_environment = list_empty;
+
+	// Setup VM (4 entries extra so we check overflow only occasionally on vm_step())
+	evaluation_stack = new VMStackFrame[EVALUATION_STACK_SIZE + 4];
+	data_stack = new LispNodeRC[DATA_STACK_SIZE + 4];
+
+	vm_reset();
 
 	// Read-Eval-Print loop
 
