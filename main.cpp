@@ -11,7 +11,7 @@
 #include "LispNode.h"
 
 constexpr unsigned int MAX_EXPRESSION_SIZE = 1024;
-constexpr unsigned int MAX_TOKEN_SIZE = 32;
+constexpr unsigned int MAX_TOKEN_SIZE = 64;
 
 constexpr int PARSE_CHARACTER = 0x1;
 constexpr int PARSE_QUOTED = 0x2;
@@ -62,6 +62,12 @@ void operator delete(void *pointer) noexcept {
 #endif /* REFERENCE_COUNTING */
 
 // Utility functions
+
+void print_error(const LispNodeRC &input, const char *message) {
+	input->print();
+	fputs(": ", stdout);
+	fputs(message, stdout);
+}
 
 void print_error(const char *op, const char *message) {
 	fputs(op, stdout);
@@ -115,6 +121,17 @@ LispNodeRC make3(const LispNodeRC &first, const LispNodeRC &second, const LispNo
 	result->head = new Box(first);
 	result->head->next = new Box(second);
 	result->head->next->next = new Box(third);
+
+	return result;
+}
+
+LispNodeRC make4(const LispNodeRC &first, const LispNodeRC &second, const LispNodeRC &third, const LispNodeRC &fourth) {
+	LispNode *result = new LispNode(LispType::List);
+
+	result->head = new Box(first);
+	result->head->next = new Box(second);
+	result->head->next->next = new Box(third);
+	result->head->next->next->next = new Box(fourth);
 
 	return result;
 }
@@ -226,6 +243,7 @@ char *read_expression() {
 			if(*current == '(') {
 				total_open++;
 			}
+
 			if(*current == ')') {
 				total_close++;
 			}
@@ -233,6 +251,15 @@ char *read_expression() {
 			*current = tolower(*current);
 
 			nread++;
+
+			if(*current == ';') {
+				// This is safe because last_line is assumed to be null-terminated
+				// (so there's an extra character after current)
+				current[0] = '\n';
+				current[1] = '\0';
+
+				break;
+			}
 		}
 
 		if(total_open <= total_close) {
@@ -279,21 +306,49 @@ char *get_next_token(const char *buffer, size_t buffer_length, size_t &position)
 		return result;
 	}
 
-	// Else if next token is something else, return it
+	// Else consider the following:
+	// - Case 1: quoted strings
+	// - Case 2: everything else
+
 	int result_position = 0;
 
-	do {
-		// Collect the non-space, non-parenthesis, non-quote character
+	if(current == '"') {
+		// Case 1: quoted strings
+
+		do {
+			// Collect any character before the end quote
+			result[result_position] = current;
+			result_position++;
+
+			// Go to next character
+			position++;
+			current = buffer[position];
+		} while(current != '\0' && current != '"');
+
+		if(current == '\0') {
+			return nullptr;
+		}
+
 		result[result_position] = current;
 		result_position++;
 
-		// Go to next character
 		position++;
-		current = buffer[position];
-	} while(current != '\0' && current != '(' && current != ')' && current != '\'' && !isspace(current));
+	}
+	else {
+		// Case 2: everything else
+
+		do {
+			// Collect the non-space, non-parenthesis, non-quote character
+			result[result_position] = current;
+			result_position++;
+
+			// Go to next character
+			position++;
+			current = buffer[position];
+		} while(current != '\0' && current != '(' && current != ')' && current != '\'' && !isspace(current));
+	}
 
 	result[result_position] = '\0';
-
 	return result;
 }
 
@@ -831,7 +886,7 @@ LispNodeRC eval_lambda(const LispNodeRC &input, const LispNodeRC &environment) {
 		return nullptr;
 	}
 
-	return make3(make_operator(OP_CLOSURE), input, environment);
+	return make4(make_operator(OP_CLOSURE), list_empty, input, environment);
 }
 
 #ifndef SEPARATE_FRAMES
@@ -856,7 +911,7 @@ LispNodeRC make_lambda_application(const LispNodeRC &input, const LispNodeRC &en
 	bool is_closure = (operator_index == OP_CLOSURE);
 	bool is_macro = (operator_index == OP_MACRO);
 
-	const LispNodeRC &procedure = (is_closure ? closure_or_macro->head->next->item : closure_or_macro);
+	const LispNodeRC &procedure = (is_closure ? closure_or_macro->head->next->next->item : closure_or_macro);
 	const LispNodeRC &procedure_parameters = procedure->head->next->item;
 
 	// Evaluate the function by setting a new environment for the defined parameters
@@ -866,7 +921,15 @@ LispNodeRC make_lambda_application(const LispNodeRC &input, const LispNodeRC &en
 	LispNodeRC new_expression = LispNode::make_list(procedure->get_head_pointer()->get_next_pointer()->get_next_pointer());
 	// Used when is_macro == #f:
 	//     Eager evaluation: creates a new environment binding parameters to their eagerly-evaluated arguments
-	LispNodeRC new_environment = (is_closure ? make_environment(closure_or_macro->head->next->next->item) : environment);
+	LispNodeRC new_environment = (is_closure ? make_environment(closure_or_macro->head->next->next->next->item) : environment);
+
+	if(is_closure) {
+		const LispNodeRC &closure_name = closure_or_macro->head->next->item;
+
+		if(closure_name != list_empty) {
+			new_environment = make_cons(make2(closure_name, closure_or_macro), new_environment);
+		}
+	}
 
 	bool packed_dot = false;
 
@@ -1025,14 +1088,17 @@ struct VMStackFrame {
 
 using VMState = VMStackFrame::State;
 
-constexpr int EVALUATION_STACK_SIZE = 96;
-constexpr int DATA_STACK_SIZE = 32;
+constexpr int EVALUATION_STACK_SIZE = 128;
+constexpr int DATA_STACK_SIZE = 128;
 
 VMStackFrame *evaluation_stack;
 LispNodeRC *data_stack;
 
 unsigned int vm_top;
 unsigned int data_top;
+
+unsigned int vm_maximum;
+unsigned int data_maximum;
 
 void vm_push_operation(int op, const LispNodeRC &input, const LispNodeRC &environment, const VMState &state) {
 	evaluation_stack[vm_top].op = op;
@@ -1041,6 +1107,10 @@ void vm_push_operation(int op, const LispNodeRC &input, const LispNodeRC &enviro
 	evaluation_stack[vm_top].vm_state = state;
 
 	vm_top++;
+
+	if(vm_top > vm_maximum) {
+		vm_maximum = vm_top;
+	}
 }
 
 inline VMStackFrame &vm_peek() {
@@ -1054,6 +1124,10 @@ inline void vm_pop() {
 inline void data_push(const LispNodeRC &node) {
 	data_stack[data_top] = node;
 	data_top++;
+
+	if(data_top > data_maximum) {
+		data_maximum = data_top;
+	}
 }
 
 inline LispNodeRC &data_peek() {
@@ -1071,6 +1145,9 @@ void vm_reset() {
 	vm_top = 0;
 	data_top = 0;
 
+	vm_maximum = 0;
+	data_maximum = 0;
+
 	context_environment = &global_environment;
 }
 
@@ -1086,7 +1163,7 @@ bool eval_reduce(const LispNodeRC &input, const LispNodeRC &environment) {
 				return true;
 			}
 
-			print_error(input->data, "evaluation error\n");
+			print_error(input, "evaluation error\n");
 			return false;
 		}
 
@@ -1192,8 +1269,7 @@ bool eval_reduce(const LispNodeRC &input, const LispNodeRC &environment) {
 		return true;
 	}
 
-	input->print();
-	print_error(" at eval_reduce()", "unknown form\n");
+	print_error(input, "unknown form\n");
 
 	return false;
 }
@@ -1240,7 +1316,7 @@ void vm_step() {
 			unsigned int arity = vm_state.normal.arity;
 
 			if(count_members(input) != arity + 1) {
-				print_error(input->head->item->data, "missing or extra arguments\n");
+				print_error(input, "missing or extra arguments\n");
 				vm_finish();
 
 				return;
@@ -1256,7 +1332,7 @@ void vm_step() {
 		// (vm-quote () (input environment))
 		case OP_VM_QUOTE: {
 			if(count_members(input) != 2) {
-				print_error(input->head->item->data, "missing or extra arguments\n");
+				print_error(input, "missing or extra arguments\n");
 				vm_finish();
 
 				return;
@@ -1394,14 +1470,14 @@ void vm_step() {
 
 			if(waiting == false) {
 				if(count_members(input) < 3) {
-					print_error(input->head->item->data, "missing arguments\n");
+					print_error(input, "missing arguments\n");
 					vm_finish();
 
 					return;
 				}
 
 				if(!symbol->is_atom() || !symbol->is_pure()) {
-					print_error(input->head->item->data, "argument type error\n");
+					print_error(symbol, "argument type error\n");
 					vm_finish();
 
 					return;
@@ -1421,11 +1497,22 @@ void vm_step() {
 					expression = make_cons(make_operator(OP_LAMBDA), make_cons(lambda_parameters, lambda_expression));
 				}
 
-				vm_push_operation(OP_VM_EVAL, expression, *context_environment, VMState::Eval{});
+				if(expression->is_operation(OP_LAMBDA)) {
+					// Use the non-extended environment: we include the closure definition at invocation time
+					vm_push_operation(OP_VM_EVAL, expression, environment, VMState::Eval{});
+				}
+				else {
+					vm_push_operation(OP_VM_EVAL, expression, *context_environment, VMState::Eval{});
+				}
+
 				waiting = true;
 			}
 			else {
 				const LispNodeRC &evaluated_expression = data_peek();
+
+				if(evaluated_expression->is_operation(OP_CLOSURE)) {
+					evaluated_expression->head->next->item = symbol;
+				}
 
 				make_query_optional_replace(symbol, *context_environment, evaluated_expression);
 				data_pop();
@@ -1491,7 +1578,7 @@ void vm_step() {
 						if(vm_next.op == OP_VM_BEGIN) {
 							tail_begin_blocks_found++;
 
-							const LispNodeRC current_closure = vm_next.extra1;
+							const LispNodeRC &current_closure = vm_next.extra1;
 
 							if(current_closure == input->head->item) {
 								tail_situation = true;
@@ -1530,7 +1617,7 @@ void vm_step() {
 				}
 
 				vm_push_operation(OP_VM_BEGIN, new_expression, new_environment, VMState::Begin{false, nullptr});
-				vm_peek().extra1 = closure_mode ? input->head->item.get_pointer() : nullptr;
+				vm_peek().extra1 = closure_mode ? input->head->item.get_pointer() : list_empty;
 			}
 
 			return;
@@ -1553,7 +1640,7 @@ void vm_step() {
 
 			if(waiting == false) {
 				if(count_members(input) != 2) {
-					print_error(input->head->item->data, "missing or extra arguments\n");
+					print_error(input, "missing or extra arguments\n");
 					vm_finish();
 
 					return;
@@ -1613,7 +1700,7 @@ void vm_step() {
 				data_pop();
 
 				if(!evaluated_input->is_list()) {
-					print_error("vm-call", "last argument must be list\n");
+					print_error(input, "last argument must be list\n");
 					vm_finish();
 
 					return;
@@ -1663,7 +1750,7 @@ void vm_step() {
 			}
 
 			if(result == nullptr) {
-				print_error(input->head->item->data, "evaluation error\n");
+				print_error(input, "evaluation error\n");
 				vm_finish();
 
 				return;
@@ -1700,7 +1787,7 @@ void vm_step() {
 				vm_pop();
 			}
 
-			vm_push_operation(OP_VM_EVAL, make_car(evaluation_items), environment, VMState::Eval{});
+			vm_push_operation(OP_VM_EVAL, evaluation_items->head->item, environment, VMState::Eval{});
 
 			if(last_item) {
 				return;
@@ -1743,14 +1830,14 @@ LispNodeRC eval_expression(const LispNodeRC input, const LispNodeRC environment)
 	vm_push_operation(OP_VM_EVAL, input, environment, VMState::Eval{});
 
 	while(vm_top > 0) {
-		if(vm_top > EVALUATION_STACK_SIZE) {
-			fputs("Eval stack overflow; try using tail-recursion", stdout);
+		if(vm_top >= EVALUATION_STACK_SIZE) {
+			fputs("Eval stack overflow; use tail-recursion\n", stdout);
 
 			return nullptr;
 		}
 
-		if(data_top > DATA_STACK_SIZE) {
-			fputs("Data stack overflow; try using tail-recursion", stdout);
+		if(data_top >= DATA_STACK_SIZE) {
+			fputs("Data stack overflow; use tail-recursion\n", stdout);
 
 			return nullptr;
 		}
@@ -1763,6 +1850,18 @@ LispNodeRC eval_expression(const LispNodeRC input, const LispNodeRC environment)
 	}
 
 	return data_peek();
+}
+
+void cleanup() {
+	for(unsigned int i = 0; i < vm_maximum; i++) {
+		evaluation_stack[i].input = list_empty;
+		evaluation_stack[i].environment = list_empty;
+		evaluation_stack[i].extra1 = list_empty;
+	}
+
+	for(unsigned int i = 0; i < data_maximum; i++) {
+		data_stack[i] = list_empty;
+	}
 }
 
 int main(int argc, char **argv) {
@@ -1793,6 +1892,10 @@ int main(int argc, char **argv) {
 	evaluation_stack = new VMStackFrame[EVALUATION_STACK_SIZE + 4];
 	data_stack = new LispNodeRC[DATA_STACK_SIZE + 4];
 
+	vm_maximum = EVALUATION_STACK_SIZE + 4;
+	data_maximum = DATA_STACK_SIZE + 4;
+	cleanup();
+
 	vm_reset();
 
 	// Read-Eval-Print loop
@@ -1822,6 +1925,10 @@ int main(int argc, char **argv) {
 
 		if((input = parse_expression(input_string)) == nullptr) {
 			fputs("Error reading expression\n", stdout);
+
+			cleanup();
+			vm_finish();
+
 			continue;
 		}
 
@@ -1829,27 +1936,24 @@ int main(int argc, char **argv) {
 
 		if((output = eval_expression(input, global_environment)) == nullptr) {
 			fputs("Error evaluating expression\n", stdout);
+
+			cleanup();
+			vm_finish();
+
+			input = nullptr;
+			output = nullptr;
+
 			continue;
 		}
 
 		output->print();
-
 		fputs("\n", stdout);
+
+		cleanup();
+		vm_finish();
 
 		input = nullptr;
 		output = nullptr;
-
-		for(unsigned int i = 0; i < EVALUATION_STACK_SIZE; i++) {
-			evaluation_stack[i].input = list_empty;
-			evaluation_stack[i].environment = list_empty;
-			evaluation_stack[i].extra1 = list_empty;
-		}
-
-		for(unsigned int i = 0; i < DATA_STACK_SIZE; i++) {
-			data_stack[i] = list_empty;
-		}
-
-		vm_finish();
 
 #ifdef SIMPLE_ALLOCATOR
 #ifdef TARGET_6502
