@@ -22,14 +22,14 @@
 
 (define (stream-map func s)
     (cond 
-        ((eq? s '()) '())
+        ((null? s) '())
         (#t (stream-cons (func (stream-car s)) (stream-map func (stream-cdr s))))
     )
 )
 
 (define (stream-filter pred s)
     (cond
-        ((eq? s '()) '())
+        ((null? s) '())
         ((pred (stream-car s)) (stream-cons (stream-car s) (stream-filter pred (stream-cdr s))))
         (#t (stream-filter pred (stream-cdr s)))
     )
@@ -37,7 +37,7 @@
 
 (define (stream-and s)
     (cond
-        ((eq? s '()) #t)
+        ((null? s) #t)
         ((not (stream-car s)) #f)
         (#t (stream-and (stream-cdr s)))
     )
@@ -45,7 +45,7 @@
 
 (define (stream-or s)
     (cond
-        ((eq? s '()) #f)
+        ((null? s) #f)
         ((stream-car s) #t)
         (#t (stream-or (stream-cdr s)))
     )
@@ -53,12 +53,21 @@
 
 (define (stream-foreach func s)
     (cond
-        ((eq? s '()) '())
+        ((null? s) '())
         (#t 
-            (begin
-                (func (stream-car s))
-                (stream-foreach func (stream-cdr s))
-            )
+            (func (stream-car s))
+            (stream-foreach func (stream-cdr s))
+        )
+    )
+)
+
+(define (stream-yield func n s)
+    (cond
+        ((= n 0) '())
+        ((null? s) '())
+        (#t
+            (func (stream-car s))
+            (stream-yield func (- n 1) (stream-cdr s))
         )
     )
 )

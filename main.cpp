@@ -69,8 +69,8 @@ void print_error(const LispNodeRC &input, const char *message) {
 	fputs(message, stdout);
 }
 
-void print_error(const char *op, const char *message) {
-	fputs(op, stdout);
+void print_error(const char *context, const char *message) {
+	fputs(context, stdout);
 	fputs(": ", stdout);
 	fputs(message, stdout);
 }
@@ -926,7 +926,7 @@ LispNodeRC make_lambda_application(const LispNodeRC &input, const LispNodeRC &en
 	if(is_closure) {
 		const LispNodeRC &closure_name = closure_or_macro->head->next->item;
 
-		if(closure_name != list_empty) {
+		if(closure_name != list_empty && make_query_optional_replace(closure_name, new_environment) == nullptr) {
 			new_environment = make_cons(make2(closure_name, closure_or_macro), new_environment);
 		}
 	}
@@ -1138,17 +1138,18 @@ inline void data_pop() {
 	data_top--;
 }
 
-// I want to differentiate reset and finish, but for now they work the same way
-#define vm_finish vm_reset
-
-void vm_reset() {
+void vm_finish() {
 	vm_top = 0;
 	data_top = 0;
 
+	context_environment = &global_environment;
+}
+
+void vm_reset() {
+	vm_finish();
+
 	vm_maximum = 0;
 	data_maximum = 0;
-
-	context_environment = &global_environment;
 }
 
 bool eval_reduce(const LispNodeRC &input, const LispNodeRC &environment) {
@@ -1370,17 +1371,26 @@ void vm_step() {
 				data_pop();
 
 				if(result == atom_true) {
-					vm_pop();
+					if(current_pair->get_head_pointer()->get_next_pointer() == nullptr) {
+						// No consequent: just evaluate to the empty list
+
+						vm_pop();
+						data_push(list_empty);
+
+						return;
+					}
 
 					if(current_pair->get_head_pointer()->get_next_pointer()->get_next_pointer() == nullptr) {
 						LispNodeRC current_consequent = current_pair->head->next->item;
 
+						vm_pop();
 						vm_push_operation(OP_VM_EVAL, current_consequent, environment, VMState::Eval{});
 					}
 					else {
 						// The consequent is a sequence of operations
 						LispNodeRC current_consequent = LispNode::make_list(current_pair->get_head_pointer()->get_next_pointer());
 
+						vm_pop();
 						vm_push_operation(OP_VM_BEGIN, current_consequent, environment, VMState::Begin{false, nullptr});
 					}
 
@@ -1483,11 +1493,6 @@ void vm_step() {
 					return;
 				}
 
-				// Extend the frame on environments
-				if(type == OP_DEFINE) {
-					*context_environment = make_cons(make2(symbol, list_empty), environment);;
-				}
-
 				LispNodeRC expression = argument2;
 
 				if(is_define_lambda) {
@@ -1497,13 +1502,8 @@ void vm_step() {
 					expression = make_cons(make_operator(OP_LAMBDA), make_cons(lambda_parameters, lambda_expression));
 				}
 
-				if(expression->is_operation(OP_LAMBDA)) {
-					// Use the non-extended environment: we include the closure definition at invocation time
-					vm_push_operation(OP_VM_EVAL, expression, environment, VMState::Eval{});
-				}
-				else {
-					vm_push_operation(OP_VM_EVAL, expression, *context_environment, VMState::Eval{});
-				}
+				// Evaluate using the current (unextended) environment
+				vm_push_operation(OP_VM_EVAL, expression, environment, VMState::Eval{});
 
 				waiting = true;
 			}
@@ -1514,7 +1514,12 @@ void vm_step() {
 					evaluated_expression->head->next->item = symbol;
 				}
 
+				if(type == OP_DEFINE) {
+					*context_environment = make_cons(make2(symbol, list_empty), environment);;
+				}
+
 				make_query_optional_replace(symbol, *context_environment, evaluated_expression);
+
 				data_pop();
 
 				vm_pop();
@@ -1529,6 +1534,13 @@ void vm_step() {
 			LispNodeRC *&saved_context_environment = vm_state.begin.saved_context_environment;
 
 			if(waiting == false) {
+				if(input == list_empty) {
+					vm_pop();
+					data_push(list_empty);
+
+					return;
+				}
+
 				saved_context_environment = context_environment;
 
 				vm_push_operation(OP_VM_EVAL_LIST, input, environment, VMState::EvalList{true, false});
@@ -1769,8 +1781,8 @@ void vm_step() {
 			bool &waiting = vm_state.eval_list.waiting;
 
 			if(evaluation_items == list_empty) {
+				// An empty evaluation list does not insert anything into the data stack
 				vm_pop();
-				data_push(list_empty);
 
 				return;
 			}
@@ -1826,7 +1838,6 @@ void mark_used(LispNode *current_node) {
 #endif /* SIMPLE_ALLOCATOR */
 
 LispNodeRC eval_expression(const LispNodeRC input, const LispNodeRC environment) {
-	vm_reset();
 	vm_push_operation(OP_VM_EVAL, input, environment, VMState::Eval{});
 
 	while(vm_top > 0) {
@@ -1864,6 +1875,13 @@ void cleanup() {
 	}
 }
 
+void cleanup_all() {
+	vm_maximum = EVALUATION_STACK_SIZE + 4;
+	data_maximum = DATA_STACK_SIZE + 4;
+
+	cleanup();
+}
+
 int main(int argc, char **argv) {
 #ifdef TARGET_6502
 	__set_heap_limit(LISP_HEAP_SIZE);
@@ -1892,22 +1910,20 @@ int main(int argc, char **argv) {
 	evaluation_stack = new VMStackFrame[EVALUATION_STACK_SIZE + 4];
 	data_stack = new LispNodeRC[DATA_STACK_SIZE + 4];
 
-	vm_maximum = EVALUATION_STACK_SIZE + 4;
-	data_maximum = DATA_STACK_SIZE + 4;
-	cleanup();
-
-	vm_reset();
+	cleanup_all();
 
 	// Read-Eval-Print loop
 
 	while(true) {
+		vm_reset();
+
 #ifdef TARGET_6502
 		fputs("* free: ", stdout);
 		print_integral(__heap_bytes_free());
 		fputs("\n", stdout);
 #endif /* TARGET_6502 */
 
-		fputs("> ", stdout);
+		fputs(";> ", stdout);
 
 		char *input_string = read_expression();
 
@@ -1941,7 +1957,6 @@ int main(int argc, char **argv) {
 			vm_finish();
 
 			input = nullptr;
-			output = nullptr;
 
 			continue;
 		}
@@ -1957,7 +1972,7 @@ int main(int argc, char **argv) {
 
 #ifdef SIMPLE_ALLOCATOR
 #ifdef TARGET_6502
-		fputs("* cleaning up... ", stdout);
+		fputs(";* cleaning up... ", stdout);
 #endif /* TARGET_6502 */
 
 		SimpleAllocator::setup();
