@@ -902,7 +902,7 @@ LispNodeRC make_environment(const LispNodeRC &environment) {
 }
 #endif /* SEPARATE_FRAMES */
 
-LispNodeRC make_lambda_application(const LispNodeRC &input, const LispNodeRC &environment) {
+LispNodeRC make_lambda_macro_application(const LispNodeRC &input, const LispNodeRC &environment) {
 	const LispNodeRC &closure_or_macro = input->head->item;
 
 	int operator_index = closure_or_macro->head->item->number_i;
@@ -1603,10 +1603,10 @@ void vm_step() {
 					}
 				}
 
-				LispNodeRC lambda_application = make_lambda_application(closure_mode ? evaluated_input : input, environment);
+				LispNodeRC lambda_application = make_lambda_macro_application(closure_mode ? evaluated_input : input, environment);
 
 				if(lambda_application == nullptr) {
-					// Error message printed in the make_lambda_application() function
+					// Error message printed in the make_lambda_macro_application() function
 					vm_finish();
 					return;
 				}
@@ -1864,6 +1864,15 @@ LispNodeRC eval_expression(const LispNodeRC input, const LispNodeRC environment)
 }
 
 void cleanup() {
+#ifdef TARGET_6502
+		fputs(";* cleaning up... ", stdout);
+#endif /* TARGET_6502 */
+
+	// Round 1: pre VM/data stack cleaning
+	while(LispNodeRC::process_deletions() > 0 || BoxRC::process_deletions() > 0) {
+		// Keep cleaning...
+	}
+
 	for(unsigned int i = 0; i < vm_maximum; i++) {
 		evaluation_stack[i].input = list_empty;
 		evaluation_stack[i].environment = list_empty;
@@ -1873,6 +1882,15 @@ void cleanup() {
 	for(unsigned int i = 0; i < data_maximum; i++) {
 		data_stack[i] = list_empty;
 	}
+
+	// Round 2: post VM/data stack cleaning
+	while(LispNodeRC::process_deletions() > 0 || BoxRC::process_deletions() > 0) {
+		// Keep cleaning...
+	}
+
+#ifdef TARGET_6502
+		fputs("done\n", stdout);
+#endif /* TARGET_6502 */
 }
 
 void cleanup_all() {
@@ -1886,6 +1904,10 @@ int main(int argc, char **argv) {
 #ifdef TARGET_6502
 	__set_heap_limit(LISP_HEAP_SIZE);
 #endif /* TARGET_6502 */
+
+	// Initializes the delayed deletion circular queues
+	LispNodeRC::init();
+	BoxRC::init();
 
 #ifdef SIMPLE_ALLOCATOR
 	SimpleAllocator::init();
@@ -1910,15 +1932,15 @@ int main(int argc, char **argv) {
 	evaluation_stack = new VMStackFrame[EVALUATION_STACK_SIZE + 4];
 	data_stack = new LispNodeRC[DATA_STACK_SIZE + 4];
 
-	cleanup_all();
-
 	// Read-Eval-Print loop
+
+	cleanup_all();
 
 	while(true) {
 		vm_reset();
 
 #ifdef TARGET_6502
-		fputs("* free: ", stdout);
+		fputs(";* free: ", stdout);
 		print_integral(__heap_bytes_free());
 		fputs("\n", stdout);
 #endif /* TARGET_6502 */
@@ -1953,10 +1975,10 @@ int main(int argc, char **argv) {
 		if((output = eval_expression(input, global_environment)) == nullptr) {
 			fputs("Error evaluating expression\n", stdout);
 
+			input = nullptr;
+
 			cleanup();
 			vm_finish();
-
-			input = nullptr;
 
 			continue;
 		}
@@ -1964,17 +1986,13 @@ int main(int argc, char **argv) {
 		output->print();
 		fputs("\n", stdout);
 
-		cleanup();
-		vm_finish();
-
 		input = nullptr;
 		output = nullptr;
 
-#ifdef SIMPLE_ALLOCATOR
-#ifdef TARGET_6502
-		fputs(";* cleaning up... ", stdout);
-#endif /* TARGET_6502 */
+		cleanup();
+		vm_finish();
 
+#ifdef SIMPLE_ALLOCATOR
 		SimpleAllocator::setup();
 
 		mark_used(atom_true.get_pointer());
@@ -1987,10 +2005,6 @@ int main(int argc, char **argv) {
 		mark_used(output.get_pointer());
 
 		SimpleAllocator::commit();
-
-#ifdef TARGET_6502
-		fputs("done\n", stdout);
-#endif /* TARGET_6502 */
 #endif /* SIMPLE_ALLOCATOR */
 	}
 
