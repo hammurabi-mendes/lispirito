@@ -10,13 +10,13 @@ A portable LISP implementation for memory-constrained systems. It works from MOS
 - The code should be small, portable, and pedagogical, *easy to understand*.
 - The code prioritizes the reduction of binary image and making evident the evaluator's meta-circular property instead of performance.
 
-This project is meant as a "software continuation" of a 6502 breadboard computer (such as the projects discussed in the 6502 Forum and Ben Eater's machine).
-Lispirito indents to show how to overcome limitations inherent to the 6502 such as the 256-byte hardware stack (with function frames in the heap), how to implement
+This project is meant as a "software continuation" of a 6502 breadboard computer (such as the projects discussed in the [6502 Forum](https://6502.org) and [Ben Eater's machine](https://www.youtube.com/@BenEater)).
+Lispirito also aims to demonstrate how one can overcome limitations inherent to the 6502 such as the 256-byte hardware stack (with function frames in the heap), how to implement
 garbage collection and recycling using reference counting, how to overcome the problem that closures refer to their own environment and could create a reference counting loop,
 and other similar implementation issues.
 
 In addition -- and importantly -- the code should make evident the intricate the so-called meta-circular relationship between the `eval` (Evaluation) 
-and `apply` (Function Application) subroutines in the code. **Hence, the interpreter is written in a way to not trade clarity for performance:** the code should be pedagogical and stylish. There are always rough edges to be revised, but as much thought will be given to style and clarity as to efficiency.
+and `apply` (Function Application) subroutines in the code, as discussed in the beautiful [Wizard Book (Structure and Interpretation of Computer Programs)](https://mitp-content-server.mit.edu/books/content/sectbyfn/books_pres_0/6515/sicp.zip/index.html). **Hence, the interpreter is written in a way to not trade clarity for performance:** the code should be pedagogical and stylish. There are always rough edges to be revised, but as much thought will be given to style and clarity as to efficiency.
 
 ## Supported features
 
