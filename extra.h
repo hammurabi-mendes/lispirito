@@ -15,15 +15,8 @@ void get_real_string(Real f, char *buffer);
 void print_integral(Integral n);
 void print_real(Real f);
 
-#ifdef SIMPLE_ALLOCATOR
-	#include "SimpleAllocator.h"
-
-	#define Allocate SimpleAllocator::allocate
-	#define Deallocate SimpleAllocator::deallocate
-#else
-	#define Allocate malloc
-	#define Deallocate free
-#endif /* SIMPLE_ALLOCATOR */
+#define Allocate malloc
+#define Deallocate free
 
 #ifdef TARGET_6502
 char *strdup(const char *input);

@@ -7,7 +7,9 @@
 #include "operators.h"
 #include "lambdas.h"
 #include "macros.h"
+
 #include "extra.h"
+
 #include "LispNode.h"
 
 constexpr unsigned int MAX_EXPRESSION_SIZE = 1024;
@@ -34,34 +36,6 @@ LispNodeRC *context_environment;
 char *read_expression();
 LispNodeRC parse_expression(const char *buffer, bool deallocate_buffer);
 LispNodeRC eval_expression(LispNodeRC input, LispNodeRC environment);
-
-#ifdef SIMPLE_ALLOCATOR
-	#include "SimpleAllocator.h"
-
-	#define Allocate SimpleAllocator::allocate
-	#define Deallocate SimpleAllocator::deallocate
-#else
-	#define Allocate malloc
-	#define Deallocate free
-#endif /* SIMPLE_ALLOCATOR */
-
-#ifdef REFERENCE_COUNTING
-	#ifndef SIMPLE_ALLOCATOR
-void *operator new(size_t size) {
-	CounterType *pointer = (CounterType *) Allocate(size + sizeof(CounterType));
-
-	*pointer = 0;
-
-	return pointer + 1;
-}
-
-void operator delete(void *pointer) noexcept {
-	Deallocate(((CounterType *) pointer) - 1);
-}
-	#endif /* !SIMPLE_ALLOCATOR */
-#endif /* REFERENCE_COUNTING */
-
-// Utility functions
 
 void print_error(const LispNodeRC &input, const char *message) {
 	input->print();
@@ -1819,24 +1793,6 @@ void vm_step() {
 	}
 }
 
-#ifdef SIMPLE_ALLOCATOR
-void mark_used(LispNode *current_node) {
-	if(SimpleAllocator::get_mark(current_node)) {
-		return;
-	}
-
-	SimpleAllocator::set_mark(current_node);
-
-	if(current_node->type == LispType::List) {
-		for(Box *current_box = current_node->get_head_pointer(); current_box != nullptr; current_box = current_box->get_next_pointer()) {
-			SimpleAllocator::set_mark(current_box);
-
-			mark_used(current_box->item.get_pointer());
-		}
-	}
-}
-#endif /* SIMPLE_ALLOCATOR */
-
 LispNodeRC eval_expression(const LispNodeRC input, const LispNodeRC environment) {
 	vm_push_operation(OP_VM_EVAL, input, environment, VMState::Eval{});
 
@@ -1863,16 +1819,7 @@ LispNodeRC eval_expression(const LispNodeRC input, const LispNodeRC environment)
 	return data_peek();
 }
 
-void cleanup() {
-#ifdef TARGET_6502
-		fputs(";* cleaning up... ", stdout);
-#endif /* TARGET_6502 */
-
-	// Round 1: pre VM/data stack cleaning
-	while(LispNodeRC::process_deletions() > 0 || BoxRC::process_deletions() > 0) {
-		// Keep cleaning...
-	}
-
+void cleanup_stacks() {
 	for(unsigned int i = 0; i < vm_maximum; i++) {
 		evaluation_stack[i].input = list_empty;
 		evaluation_stack[i].environment = list_empty;
@@ -1882,9 +1829,22 @@ void cleanup() {
 	for(unsigned int i = 0; i < data_maximum; i++) {
 		data_stack[i] = list_empty;
 	}
+}
+
+void cleanup() {
+#ifdef TARGET_6502
+		fputs(";* cleaning up... ", stdout);
+#endif /* TARGET_6502 */
+
+	// Round 1: pre VM/data stack cleaning
+	while(Allocator<LispNode>::process_deletions() == true || Allocator<Box>::process_deletions() == true) {
+		// Keep cleaning...
+	}
+
+	cleanup_stacks();
 
 	// Round 2: post VM/data stack cleaning
-	while(LispNodeRC::process_deletions() > 0 || BoxRC::process_deletions() > 0) {
+	while(Allocator<LispNode>::process_deletions() == true || Allocator<Box>::process_deletions() == true) {
 		// Keep cleaning...
 	}
 
@@ -1893,11 +1853,11 @@ void cleanup() {
 #endif /* TARGET_6502 */
 }
 
-void cleanup_all() {
+void initialize_stacks() {
 	vm_maximum = EVALUATION_STACK_SIZE + 4;
 	data_maximum = DATA_STACK_SIZE + 4;
 
-	cleanup();
+	cleanup_stacks();
 }
 
 int main(int argc, char **argv) {
@@ -1905,13 +1865,9 @@ int main(int argc, char **argv) {
 	__set_heap_limit(LISP_HEAP_SIZE);
 #endif /* TARGET_6502 */
 
-	// Initializes the delayed deletion circular queues
-	LispNodeRC::init();
-	BoxRC::init();
-
-#ifdef SIMPLE_ALLOCATOR
-	SimpleAllocator::init();
-#endif /* SIMPLE_ALLOCATOR */
+	// Initializes the allocator managers for LispNode and Box
+	Allocator<LispNode>::init();
+	Allocator<Box>::init();
 
 	// Setup global constants
 
@@ -1934,7 +1890,7 @@ int main(int argc, char **argv) {
 
 	// Read-Eval-Print loop
 
-	cleanup_all();
+	initialize_stacks();
 
 	while(true) {
 		vm_reset();
@@ -1991,24 +1947,19 @@ int main(int argc, char **argv) {
 
 		cleanup();
 		vm_finish();
-
-#ifdef SIMPLE_ALLOCATOR
-		SimpleAllocator::setup();
-
-		mark_used(atom_true.get_pointer());
-		mark_used(atom_false.get_pointer());
-		mark_used(list_empty.get_pointer());
-
-		mark_used(global_environment.get_pointer());
-
-		mark_used(input.get_pointer());
-		mark_used(output.get_pointer());
-
-		SimpleAllocator::commit();
-#endif /* SIMPLE_ALLOCATOR */
 	}
 
 	fputs("\n", stdout);
+
+	// Clears up global structures
+
+	atom_true = nullptr;
+	atom_false = nullptr;
+	list_empty = nullptr;
+	global_environment = nullptr;
+
+	cleanup();
+	vm_finish();
 
 	return EXIT_SUCCESS;
 }

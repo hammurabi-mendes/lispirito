@@ -30,14 +30,11 @@ else
 	LDFLAGS+=-flto
 endif
 
+PROGRAMS=lispirito
+DEPENDENCIES+=main.o LispNode.o extra.o operators.o circular_queue.o RCPointer.o Allocator.o
+
 ifeq ($(REFERENCE_COUNTING), 1)
 CFLAGS+=-DREFERENCE_COUNTING
-DEPENDENCIES+=RCPointer.o
-endif
-
-ifeq ($(SIMPLE_ALLOCATOR), 1)
-CFLAGS+=-DSIMPLE_ALLOCATOR
-DEPENDENCIES+=SimpleAllocator.o
 endif
 
 ifeq ($(INITIAL_ENVIRONMENT), 1)
@@ -45,9 +42,6 @@ CFLAGS+=-DINITIAL_ENVIRONMENT
 endif
 
 CPPFLAGS=$(STANDARD) $(CFLAGS)
-
-PROGRAMS=lispirito
-DEPENDENCIES+=main.o LispNode.o extra.o operators.o
 
 all: $(PROGRAMS)
 
