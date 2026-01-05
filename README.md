@@ -1,14 +1,22 @@
-# lispirito
+# Lispirito
 
 A portable LISP implementation for memory-constrained systems. It works from MOS 6502 to modern ARM/Intel 64-bit machines.
 
 ## Project goals
 
 - Binary size smaller than 31.5K on MOS 6502 (on a minimal build), yet capable with modern architectures.
-- Macro expansion support for syntatic sugar.
+- Macro expansion support for syntactic sugar.
 - Depend on a minimal set of `libc` functions.
 - The code should be small, portable, and pedagogical, *easy to understand*.
-- The code prioritizes over performance the reduction of binary image and making evident the evaluator's meta-circular property.
+- The code prioritizes the reduction of binary image and making evident the evaluator's meta-circular property instead of performance.
+
+This project is meant as a "software continuation" of a 6502 breadboard computer (such as the projects discussed in the 6502 Forum and Ben Eater's machine).
+Lispirito indents to show how to overcome limitations inherent to the 6502 such as the 256-byte hardware stack (with function frames in the heap), how to implement
+garbage collection and recycling using reference counting, how to overcome the problem that closures refer to their own environment and could create a reference counting loop,
+and other similar implementation issues.
+
+In addition -- and importantly -- the code should make evident the intricate the so-called meta-circular relationship between the `eval` (Evaluation) 
+and `apply` (Function Application) subroutines in the code. **Hence, the interpreter is written in a way to not trade clarity for performance:** the code should be pedagogical and stylish. There are always rough edges to be revised, but as much thought will be given to style and clarity as to efficiency.
 
 ## Supported features
 
@@ -27,7 +35,7 @@ We support a a good subset of the Scheme R7RS-small specification:
 - Environment and macro support: `begin`, `set!`, `macro`, `read`, `write`, `current-environment`
 - Low-level memory operations (C-style): `mem-alloc`, `mem-read`, `mem-write`, `mem-fill`, `mem-copy`, `mem-addr`
 
-If you compile with `INITIAL_ENVIRONMENT=1` (of if you download the "full" releases), you can use many of the expected functions like `map`, `filter` by loading them with `(load 'map)`, `(load 'filter)`, etc. Alternatively, you can **download the minimal release and type/paste the definitions of the functions in  [environment.lsp](environment.lsp).** All functions are still available in the minimal release, you just have to type/paste them from [environment.lsp](environment.lsp).
+If you compile with `INITIAL_ENVIRONMENT=1`, you can use many of the expected functions like `map`, `filter` by loading them with `(load 'map)`, `(load 'filter)`, etc. Alternatively, you can **download the minimal release and type/paste the definitions of the functions in  [environment.lsp](environment.lsp).** All functions are still available in the minimal release, you just have to type/paste them from [environment.lsp](environment.lsp).
   - Functional operators: `map`, `foldl`, `foldr`, `filter`
   - List operations: `length`, `reverse`, `append`, `list`, `list?`
   - Other arithmetic operators: `abs`, `modulo`
@@ -40,11 +48,16 @@ Lambda definitions create *closures*, and `cond`, `and/or`, and `begin` are all 
 
 ## Notably missing features
 
-- Although a good subset of the Scheme R7RS-small specification is covered, many operators or data structures are left out due to space (notably vectors and maps). It should be fairly straightfoward to extend the implementation to add them, but that would increase the footprint past our size goal of 31.5K.
+- Although a good subset of the Scheme R7RS-small specification is covered, many operators or data structures are left out due to space (notably vectors and maps). It should be fairly straightforward to extend the implementation to add them, but that would increase the footprint past our size goal of 31.5K.
+
+## Future plans
+
+- In the next versions, I plan to include `call/cc` and `let*` (for now you can use `begin` and `define`).
+- I will also make versions for DOS, Amiga, and (hopefully) BSD 2.11 on a PDP-11. Building and running on modern systems should already be trivial.
 
 ## Building
 
-If you are building **lispirito** in a modern system, just a simple `make clean; make install` should work.
+If you are building **Lispirito** in a modern system, just a simple `make clean; make install` should work.
 To include debugging, use `make DEBUG=1` as your build command.
 
 If you are building for 6502 platforms, use `make clean; make TARGET_6502=1`. To include some standard lambdas and macros, use `make clean; make TARGET_6502=1 INITIAL_ENVIROMENT=1` as your build command. Make sure you have heap memory for this! If you do not, you can exclude the initial environment and:
@@ -52,7 +65,7 @@ If you are building for 6502 platforms, use `make clean; make TARGET_6502=1`. To
 - Type the definitions you want in the REPL, maximally saving space; or
 - Edit the `lambdas.h` and `macros.h` files to include only the definitions you need.
 
-If you are compiling **lispirito** for MOS 6502 (in particular Ben Eater's machine), first download the LLVM-MOS SDK
+If you are compiling **Lispirito** for MOS 6502 (in particular Ben Eater's machine), first download the LLVM-MOS SDK
 in the link below, and place it alongside this project directory. You might want to adjust the `CXX` location in your
 Makefile depending on where your SDK is. You can find the SDK here:
 
@@ -68,6 +81,6 @@ $ xattr -d com.apple.quarantine llvm-mos-macos.tar.xz
 
 ## Tweaks
 
-You can change the default definitions of Integral and Real in `extra.h` to best accomodate the build to your system.
+You can change the default definitions of Integral and Real in `extra.h` to best accommodate the build to your system.
 
 Have fun!
