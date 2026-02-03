@@ -33,6 +33,11 @@ endif
 PROGRAMS=lispirito
 DEPENDENCIES+=main.o LispNode.o extra.o operators.o circular_queue.o RCPointer.o Allocator.o
 
+ifeq ($(TARGET_C64), 1)
+DEPENDENCIES+=terminal.o
+CFLAGS+=-DTARGET_C64
+endif
+
 ifeq ($(REFERENCE_COUNTING), 1)
 CFLAGS+=-DREFERENCE_COUNTING
 endif
