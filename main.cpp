@@ -10,6 +10,10 @@
 
 #include "extra.h"
 
+#ifdef TARGET_C64
+	#include "terminal.h"
+#endif // TARGET_C64
+
 #include "LispNode.h"
 
 constexpr unsigned int MAX_EXPRESSION_SIZE = 1024;
@@ -201,6 +205,24 @@ LispNodeRC make_substitution(const LispNodeRC &old_symbol, const LispNodeRC &new
 char *read_expression() {
 	// Allocated here and deallocated in parse_buffer()
 	char *read_buffer = static_cast<char *>(Allocate(MAX_EXPRESSION_SIZE));
+
+#ifdef TARGET_C64
+	join_lines = true;
+	join_character = '\n';
+
+	int result = terminal_getline(read_buffer, MAX_EXPRESSION_SIZE, false);
+
+	for(int i = 0; i < result; i++) {
+		if(read_buffer[i] == ';') {
+			read_buffer[i] = '\n';
+			read_buffer[i + 1] = '\0';
+
+			break;
+		}
+	}
+
+	return read_buffer;
+#endif // TARGET_C64
 
 	int nread = 0;
 	int total_open = 0;
@@ -1832,9 +1854,9 @@ void cleanup_stacks() {
 }
 
 void cleanup() {
-#ifdef TARGET_6502
+#ifdef OPTIONAL_MSGS
 		fputs(";* cleaning up... ", stdout);
-#endif /* TARGET_6502 */
+#endif /* OPTIONAL_MSGS */
 
 	// Round 1: pre VM/data stack cleaning
 	while(Allocator<LispNode>::process_deletions() == true || Allocator<Box>::process_deletions() == true) {
@@ -1848,9 +1870,9 @@ void cleanup() {
 		// Keep cleaning...
 	}
 
-#ifdef TARGET_6502
+#ifdef OPTIONAL_MSGS
 		fputs("done\n", stdout);
-#endif /* TARGET_6502 */
+#endif /* OPTIONAL_MSGS */
 }
 
 void initialize_stacks() {
@@ -1895,13 +1917,13 @@ int main(int argc, char **argv) {
 	while(true) {
 		vm_reset();
 
-#ifdef TARGET_6502
+#ifdef OPTIONAL_MSGS
 		fputs(";* free: ", stdout);
 		print_integral(__heap_bytes_free());
 		fputs("\n", stdout);
-#endif /* TARGET_6502 */
+#endif /* OPTIONAL_MSGS */
 
-		fputs(";> ", stdout);
+		fputs("> ", stdout);
 
 		char *input_string = read_expression();
 
