@@ -8,14 +8,14 @@ A portable LISP implementation for memory-constrained systems. It works from MOS
 - Macro expansion support for syntactic sugar.
 - Depend on a minimal set of `libc` functions.
 - The code should be small, portable, and pedagogical, *easy to understand*.
-- The code prioritizes the reduction of binary image and making evident the evaluator's meta-circular property instead of performance.
+- The code prioritizes the reduction of binary image and making evident the evaluator's meta-circular property instead of focusing on performance.
 
 This project is meant as a "software continuation" of a 6502 breadboard computer (such as the projects discussed in the [6502 Forum](https://6502.org) and [Ben Eater's machine](https://www.youtube.com/@BenEater)).
 Lispirito also aims to demonstrate how one can overcome limitations inherent to the 6502 such as the 256-byte hardware stack (with function frames in the heap), how to implement
-garbage collection and recycling using reference counting, how to overcome the problem that closures refer to their own environment and could create a reference counting loop,
+garbage collection and recycling using reference counting, how to overcome the problem that closures refer to their own environment and could create a reference counting loop (well... that one still needs work),
 and other similar implementation issues.
 
-In addition -- and importantly -- the code should make evident the intricate the so-called meta-circular relationship between the `eval` (Evaluation) 
+Importantly, the code should make evident the intricate the so-called meta-circular relationship between the `eval` (Evaluation) 
 and `apply` (Function Application) subroutines in the code, as discussed in the beautiful [Wizard Book (Structure and Interpretation of Computer Programs)](https://mitp-content-server.mit.edu/books/content/sectbyfn/books_pres_0/6515/sicp.zip/index.html). **Hence, the interpreter is written in a way to not trade clarity for performance:** the code should be pedagogical and stylish. There are always rough edges to be revised, but as much thought will be given to style and clarity as to efficiency.
 
 ## Supported features
@@ -32,7 +32,7 @@ We support a a good subset of the Scheme R7RS-small specification:
 - Arithmetic comparison operators: `<`, `=`, `>`, `<=`, `>=`
 - Logical operators: `and`, `or`, `not`
     - If you want an n-ary `and`/`or`, use `apply` together with `and`/`or`
-- Environment and macro support: `begin`, `set!`, `macro`, `read`, `write`, `current-environment`
+- Environment and macro support: `begin`, `let`, `let*`, `set!`, `macro`, `read`, `write`, `current-environment`
 - Low-level memory operations (C-style): `mem-alloc`, `mem-read`, `mem-write`, `mem-fill`, `mem-copy`, `mem-addr`
 
 If you compile with `INITIAL_ENVIRONMENT=1`, you can use many of the expected functions like `map`, `filter` by loading them with `(load 'map)`, `(load 'filter)`, etc. Alternatively, you can **download the minimal release and type/paste the definitions of the functions in  [environment.lsp](environment.lsp).** All functions are still available in the minimal release, you just have to type/paste them from [environment.lsp](environment.lsp).
@@ -42,7 +42,7 @@ If you compile with `INITIAL_ENVIRONMENT=1`, you can use many of the expected fu
   - String support: `list->string`, `string->list`, `string-length`, `string-append`, `string-ref`, `string-set!`, `make-string`, `substring`
   - Display support: `display`, `newline`
   - Function application operator: `apply`
-  - Scope and control operators: `if`, `let`
+  - Scope and control operators: `if`, `letrec`
   
 Lambda definitions create *closures*, and `cond`, `and/or`, and `begin` are all tail-recursive (just make sure to recur in [tail-position](https://en.wikipedia.org/wiki/Tail_call)).
 
@@ -52,8 +52,9 @@ Lambda definitions create *closures*, and `cond`, `and/or`, and `begin` are all 
 
 ## Future plans
 
-- In the next versions, I plan to include `call/cc` and `let*` (for now you can use `begin` and `define`).
-- I will also make versions for DOS, Amiga, and (hopefully) BSD 2.11 on a PDP-11. Building and running on modern systems should already be trivial.
+- Support for `call/cc`
+- Support for I/O for C64 (later to other platforms)
+- Versions for DOS, Amiga, and BSD 2.11 on a PDP-11. Building and running on modern systems should be already trivial.
 
 ## Building
 
