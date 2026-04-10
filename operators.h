@@ -51,6 +51,8 @@ enum LispOperation {
     OP_NOT,
 
     OP_BEGIN,
+    OP_LET,
+    OP_LET_STAR,
     OP_DEFINE,
     OP_SET_E,
     OP_EVAL,
@@ -83,7 +85,8 @@ enum LispOperation {
     OP_VM_EVAL,
     OP_VM_LOAD,
     OP_VM_CALL,
-    OP_VM_EVAL_LIST
+    OP_VM_EVAL_LIST,
+    OP_VM_DEFINE_LIST
 };
 
 constexpr int NUMBER_BASIC_OPERATORS = OP_VM_EVAL_LIST + 1;

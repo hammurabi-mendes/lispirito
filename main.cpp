@@ -987,13 +987,13 @@ struct VMStackFrame {
 			bool waiting;
 			unsigned int arity;
 
-			Apply(bool closure_mode, bool waiting, unsigned int arity): closure_mode{closure_mode}, waiting{waiting}, arity{arity} {}
+			Apply(bool closure_mode, unsigned int arity): closure_mode{closure_mode}, waiting{false}, arity{arity} {}
 		} apply;
 
 		struct First {
 			bool waiting;
 
-			First(bool waiting): waiting{waiting} {}
+			First(): waiting{false} {}
 		} first;
 
 		struct Normal {
@@ -1009,28 +1009,29 @@ struct VMStackFrame {
 		struct Cond {
 			bool waiting;
 
-			Cond(bool waiting): waiting{waiting} {}
+			Cond(): waiting{false} {}
 		} cond;
 
 		struct Logic {
 			int type;
 			bool waiting;
 
-			Logic(int type, bool waiting): type{type}, waiting{waiting} {}
+			Logic(int type): type{type}, waiting{false} {}
 		} logic;
 
 		struct Define {
 			int type;
 			bool waiting;
 
-			Define(int type, bool waiting): type{type}, waiting{waiting} {}
+			Define(int type): type{type}, waiting{false} {}
 		} define;
 
 		struct Begin {
+			int type;
 			bool waiting;
 			LispNodeRC *saved_context_environment;
 
-			Begin(bool waiting, LispNodeRC *saved_context_environment): waiting{waiting}, saved_context_environment{saved_context_environment} {}
+			Begin(int type): type{type}, waiting{false}, saved_context_environment{nullptr} {}
 		} begin;
 
 		struct Eval {
@@ -1041,7 +1042,7 @@ struct VMStackFrame {
 			int type;
 			bool waiting;
 
-			Load(int type, bool waiting): type{type}, waiting{waiting} {}
+			Load(int type): type{type}, waiting{false} {}
 		} load;
 
 		struct Call {
@@ -1054,10 +1055,17 @@ struct VMStackFrame {
 			bool discard_intermediary;
 			bool waiting;
 
-			EvalList(bool discard_intermediary, bool waiting): discard_intermediary{discard_intermediary}, waiting{waiting} {}
+			EvalList(bool discard_intermediary): discard_intermediary{discard_intermediary}, waiting{false} {}
 		} eval_list;
 
-		State(): apply{false, false, 0} {}
+		struct DefineList {
+			int type;
+			bool waiting;
+
+			DefineList(int type): type{type}, waiting{false} {}
+		} define_list;
+
+		State(): apply{false, 0} {}
 
 		~State() {
 		}
@@ -1074,6 +1082,7 @@ struct VMStackFrame {
 		State(const Load &load): load{load} {}
 		State(const Call &call): call{call} {}
 		State(const EvalList &eval_list): eval_list{eval_list} {}
+		State(const DefineList &define_list): define_list{define_list} {}
 	} vm_state;
 
 	VMStackFrame(): op(0), input(nullptr), environment(nullptr), vm_state{State(State::Eval())} {}
@@ -1190,7 +1199,7 @@ bool eval_reduce(const LispNodeRC &input, const LispNodeRC &environment) {
 
 			case SpecialCond:
 				// Special:
-				vm_push_operation(OP_VM_COND, make_cdr(input), environment, VMState::Cond{false});
+				vm_push_operation(OP_VM_COND, make_cdr(input), environment, VMState::Cond{});
 				return true;
 
 			case Normal0:
@@ -1203,22 +1212,22 @@ bool eval_reduce(const LispNodeRC &input, const LispNodeRC &environment) {
 
 			case SpecialLoad:
 				// Special:
-				vm_push_operation(OP_VM_LOAD, input, environment, VMState::Load{operation_index, false});
+				vm_push_operation(OP_VM_LOAD, input, environment, VMState::Load{operation_index});
 				return true;
 
 			case SpecialLogic:
 				// Special:
-				vm_push_operation(OP_VM_LOGIC, make_cdr(input), environment, VMState::Logic{operation_index, false});
+				vm_push_operation(OP_VM_LOGIC, make_cdr(input), environment, VMState::Logic{operation_index});
 				return true;
 
 			case SpecialBegin:
 				// Special:
-				vm_push_operation(OP_VM_BEGIN, make_cdr(input), make_environment(environment), VMState::Begin{false, nullptr});
+				vm_push_operation(OP_VM_BEGIN, make_cdr(input), make_environment(environment), VMState::Begin{operation_index});
 				return true;
 
 			case SpecialDefine:
 				// Special:
-				vm_push_operation(OP_VM_DEFINE, input, environment, VMState::Define{operation_index, false});
+				vm_push_operation(OP_VM_DEFINE, input, environment, VMState::Define{operation_index});
 				return true;
 
 			case SpecialEval:
@@ -1257,12 +1266,12 @@ bool eval_reduce(const LispNodeRC &input, const LispNodeRC &environment) {
 	bool is_macro = first->is_operation(OP_MACRO);
 
 	if(is_closure || is_macro) {
-		vm_push_operation(OP_VM_APPLY, input, environment, VMState::Apply{is_closure, false, count_members(input) - 1});
+		vm_push_operation(OP_VM_APPLY, input, environment, VMState::Apply{is_closure, count_members(input) - 1});
 		return true;
 	}
 
 	if((first->is_atom() && first->is_pure()) || first->is_list()) {
-		vm_push_operation(OP_VM_FIRST, input, environment, VMState::First{false});
+		vm_push_operation(OP_VM_FIRST, input, environment, VMState::First{});
 		return true;
 	}
 
@@ -1322,7 +1331,7 @@ void vm_step() {
 			vm_pop();
 
 			vm_push_operation(OP_VM_CALL, input, environment, VMState::Call{arity});
-			vm_push_operation(OP_VM_EVAL_LIST, make_cdr(input), environment, VMState::EvalList{false, false});
+			vm_push_operation(OP_VM_EVAL_LIST, make_cdr(input), environment, VMState::EvalList{false});
 
 			return;
 		}
@@ -1387,7 +1396,7 @@ void vm_step() {
 						LispNodeRC current_consequent = LispNode::make_list(current_pair->get_head_pointer()->get_next_pointer());
 
 						vm_pop();
-						vm_push_operation(OP_VM_BEGIN, current_consequent, environment, VMState::Begin{false, nullptr});
+						vm_push_operation(OP_VM_BEGIN, current_consequent, environment, VMState::Begin{OP_BEGIN});
 					}
 
 					return;
@@ -1498,7 +1507,7 @@ void vm_step() {
 					expression = make_cons(make_operator(OP_LAMBDA), make_cons(lambda_parameters, lambda_expression));
 				}
 
-				// Evaluate using the current (unextended) environment
+				// Evaluate using the provided environment
 				vm_push_operation(OP_VM_EVAL, expression, environment, VMState::Eval{});
 
 				waiting = true;
@@ -1511,7 +1520,8 @@ void vm_step() {
 				}
 
 				if(type == OP_DEFINE) {
-					*context_environment = make_cons(make2(symbol, list_empty), environment);;
+					// Extend the current environment
+					*context_environment = make_cons(make2(symbol, list_empty), *context_environment);;
 				}
 
 				make_query_optional_replace(symbol, *context_environment, evaluated_expression);
@@ -1524,8 +1534,52 @@ void vm_step() {
 
 			return;
 		}
-		// (vm-begin (<saved_context_environment> <current_closure> <waiting>) (evaluation_items environment))
+		// (vm-define-list (definition_items environment))
+		case OP_VM_DEFINE_LIST: {
+			int type = vm_state.begin.type;
+			bool &waiting = vm_state.define_list.waiting;
+			LispNodeRC &definition_items = top.input;
+
+			if(waiting == false) {
+				if(!definition_items->is_list()) {
+					print_error(definition_items, "argument type error\n");
+					vm_finish();
+
+					return;
+				}
+			}
+
+			// If we performed a definition, cleanup the data stack
+			if(waiting == true) {
+				data_pop();
+			}
+
+			if(definition_items == list_empty) {
+				// An empty definition list does not insert anything into the data stack
+				vm_pop();
+
+				return;
+			}
+
+			const LispNodeRC &current_definition = definition_items->head->item;
+
+			if(type == OP_LET) {
+				// let
+				vm_push_operation(OP_VM_DEFINE, make_cons(make_operator(OP_DEFINE), current_definition), environment, VMState::Define{OP_DEFINE});
+			}
+			else {
+				// let*
+				vm_push_operation(OP_VM_DEFINE, make_cons(make_operator(OP_DEFINE), current_definition), *context_environment, VMState::Define{OP_DEFINE});
+			}
+
+			definition_items = make_cdr(definition_items);
+			waiting = true;
+
+			return;
+		}
+		// (vm-begin (<OP_LET/OP_LET_STAR/OP_BEGIN> <waiting> <saved_context_environment>) ([begin or let (definitions)] statements environment))
 		case OP_VM_BEGIN: {
+			int type = vm_state.begin.type;
 			bool &waiting = vm_state.begin.waiting;
 			LispNodeRC *&saved_context_environment = vm_state.begin.saved_context_environment;
 
@@ -1539,8 +1593,20 @@ void vm_step() {
 
 				saved_context_environment = context_environment;
 
-				vm_push_operation(OP_VM_EVAL_LIST, input, environment, VMState::EvalList{true, false});
+				if(type == OP_LET || type == OP_LET_STAR) {
+					// The first element of input is a definitions_list
+					vm_push_operation(OP_VM_EVAL_LIST, make_cdr(input), environment, VMState::EvalList{true});
+				}
+				else {
+					vm_push_operation(OP_VM_EVAL_LIST, input, environment, VMState::EvalList{true});
+				}
 				context_environment = &(vm_peek().environment);
+
+				if(type == OP_LET || type == OP_LET_STAR) {
+					LispNodeRC &definitions = input->head->item;
+
+					vm_push_operation(OP_VM_DEFINE_LIST, definitions, *context_environment, VMState::DefineList{type});
+				}
 
 				waiting = true;
 			}
@@ -1559,7 +1625,7 @@ void vm_step() {
 			bool &waiting = vm_state.apply.waiting;
 
 			if(waiting == false && closure_mode == true) {
-				vm_push_operation(OP_VM_EVAL_LIST, make_cdr(input), environment, VMState::EvalList{false, false});
+				vm_push_operation(OP_VM_EVAL_LIST, make_cdr(input), environment, VMState::EvalList{false});
 				waiting = true;
 			}
 			else {
@@ -1624,7 +1690,7 @@ void vm_step() {
 					}
 				}
 
-				vm_push_operation(OP_VM_BEGIN, new_expression, new_environment, VMState::Begin{false, nullptr});
+				vm_push_operation(OP_VM_BEGIN, new_expression, new_environment, VMState::Begin{OP_BEGIN});
 				vm_peek().extra1 = closure_mode ? input->head->item.get_pointer() : list_empty;
 			}
 

@@ -56,6 +56,8 @@ const char *operator_names[] = {
 
     // Environment and Lambda support
     "begin",
+    "let",
+    "let*",
     "define",
     "set!",
     "eval",
@@ -91,7 +93,8 @@ const char *operator_names[] = {
     "vm-eval",
     "vm-load",
     "vm-call",
-    "vm-eval-list"
+    "vm-eval-list",
+    "vm-define-list"
 };
 
 ReduceMode operator_reduce_modes[] = {
@@ -150,6 +153,8 @@ ReduceMode operator_reduce_modes[] = {
 
     // Environment and Lambda support
     SpecialBegin,
+    SpecialBegin,
+    SpecialBegin,
     SpecialDefine,
     SpecialDefine,
     SpecialEval,
@@ -174,6 +179,7 @@ ReduceMode operator_reduce_modes[] = {
     SpecialLoad,
 
     // VM operators
+    VM,
     VM,
     VM,
     VM,
