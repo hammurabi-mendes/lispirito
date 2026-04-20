@@ -142,7 +142,7 @@ LispNodeRC make_cdr(const LispNodeRC &list) {
 		return nullptr;
 	}
 
-	Box *second_element_box = list->get_head_pointer()->get_next_pointer();
+	Box *second_element_box = list->get_pointer(1);
 
 	if(second_element_box == nullptr) {
 		return list_empty;
@@ -394,17 +394,17 @@ int examine_string(char *token) {
 	return output;
 }
 
-LispNodeRC parse_atom(char *token) {
+LispNode *parse_atom(char *token) {
 	int output = examine_string(token);
 
 	// Try first true and false literals
 
 	if(strcmp(token, "#t") == 0) {
-		return atom_true;	
+		return atom_true.get_pointer();	
 	}
 
 	if(strcmp(token, "#f") == 0) {
-		return atom_false;	
+		return atom_false.get_pointer();	
 	}
 
 	LispNode *result = new LispNode(LispType::AtomPure);
@@ -458,7 +458,7 @@ LispNodeRC parse_atom(char *token) {
 	return result;
 }
 
-LispNodeRC parse_expression(const char *buffer, size_t buffer_length, size_t &position, bool &error) {
+LispNode *parse_expression(const char *buffer, size_t buffer_length, size_t &position, bool &error) {
 	char *token = get_next_token(buffer, buffer_length, position);
 
 	if(token == nullptr) {
@@ -468,25 +468,32 @@ LispNodeRC parse_expression(const char *buffer, size_t buffer_length, size_t &po
 	}
 
 	if(strcmp(token, "'") == 0) {
-		LispNodeRC result = new LispNode(LispType::List);
-
-		LispNodeRC quoted = parse_expression(buffer, buffer_length, position, error);
+		LispNode *quoted = parse_expression(buffer, buffer_length, position, error);
 
 		if(error) {
 			return nullptr;
 		}
 
-		return make2(make_operator(OP_QUOTE), quoted);
+		LispNode *result = new LispNode(LispType::List);
+
+		result->head= new Box(make_operator(OP_QUOTE));
+		result->head->next = new Box(quoted);
+
+		return result;
 	}
 	
 	if(strcmp(token, "(") == 0) {
-		LispNodeRC result = new LispNode(LispType::List);
+		LispNode *result = new LispNode(LispType::List);
 		result->head = nullptr;
 
 		Box *last_box = nullptr;
-		LispNodeRC member;
+		LispNode *member;
 
 		while((member = parse_expression(buffer, buffer_length, position, error)) != nullptr) {
+			if(error) {
+				break;
+			}
+
 			Box *member_box = new Box(member);
 
 			if(last_box == nullptr) {
@@ -499,12 +506,15 @@ LispNodeRC parse_expression(const char *buffer, size_t buffer_length, size_t &po
 			last_box = member_box;
 		}
 
-		if(error) {
-			return nullptr;
-		}
+		if(error || result->head == nullptr) {
+			delete result;
 
-		if(result->head == nullptr) {
-			return list_empty;
+			if(error) {
+				return nullptr;
+			}
+			else {
+				return list_empty.get_pointer();
+			}
 		}
 
 		return result;
@@ -681,7 +691,7 @@ LispNodeRC eval_gen1(const LispNodeRC &input, const LispNodeRC &environment) {
 				return nullptr;
 			}
 
-			result = parse_atom(output1->data).get_pointer();
+			result = parse_atom(output1->data);
 
 			if(result == nullptr || !result->is_numeric()) {
 				return nullptr;
@@ -845,7 +855,7 @@ LispNodeRC eval_gen3(const LispNodeRC &input, const LispNodeRC &environment) {
 
 const LispNodeRC &eval_procedure(const LispNodeRC &input, const LispNodeRC &environment) {
 	if(count_members(input) < 3) {
-		print_error("lambda", "missing arguments\n");
+		print_error("lambda", "argument count error\n");
 
 		return list_empty;
 	}
@@ -914,7 +924,7 @@ LispNodeRC make_lambda_macro_application(const LispNodeRC &input, const LispNode
 
 	// Used when is_macro == #t:
 	//     Macro expansion: substitutes non-evaluated parameters into arguments in the original expression
-	LispNodeRC new_expression = LispNode::make_list(procedure->get_head_pointer()->get_next_pointer()->get_next_pointer());
+	LispNodeRC new_expression = LispNode::make_list(procedure->get_pointer(2));
 	// Used when is_macro == #f:
 	//     Eager evaluation: creates a new environment binding parameters to their eagerly-evaluated arguments
 	LispNodeRC new_environment = (is_closure ? make_environment(closure_or_macro->head->next->next->next->item) : environment);
@@ -930,11 +940,11 @@ LispNodeRC make_lambda_macro_application(const LispNodeRC &input, const LispNode
 	bool packed_dot = false;
 
 	Box *current_parameter_box = procedure_parameters->get_head_pointer();
-	Box *current_argument_box = input->get_head_pointer()->get_next_pointer();
+	Box *current_argument_box = input->get_pointer(1);
 
 	while(current_parameter_box != nullptr || current_argument_box != nullptr) {
 		if(current_parameter_box == nullptr || current_argument_box == nullptr) {
-			print_error("operator application", "missing or extra arguments\n");
+			print_error("operator application", "argument count error\n");
 
 			return nullptr;
 		}
@@ -1210,11 +1220,6 @@ bool eval_reduce(const LispNodeRC &input, const LispNodeRC &environment) {
 				vm_push_operation(OP_VM_NORMAL, input, environment, VMState::Normal{(unsigned int) (operation_reduce_mode - Normal0)});
 				return true;
 
-			case SpecialLoad:
-				// Special:
-				vm_push_operation(OP_VM_LOAD, input, environment, VMState::Load{operation_index});
-				return true;
-
 			case SpecialLogic:
 				// Special:
 				vm_push_operation(OP_VM_LOGIC, make_cdr(input), environment, VMState::Logic{operation_index});
@@ -1253,7 +1258,7 @@ bool eval_reduce(const LispNodeRC &input, const LispNodeRC &environment) {
 			
 			default:
 				print_integral(operation_reduce_mode);
-				print_error(" at eval_reduce()", "unknown reduce requested\n");
+				print_error(" at eval_reduce()", "unknown reduce type\n");
 				vm_finish();
 		}
 	}
@@ -1275,7 +1280,7 @@ bool eval_reduce(const LispNodeRC &input, const LispNodeRC &environment) {
 		return true;
 	}
 
-	print_error(input, "unknown form\n");
+	print_error(input, "evaluation error\n");
 
 	return false;
 }
@@ -1322,7 +1327,7 @@ void vm_step() {
 			unsigned int arity = vm_state.normal.arity;
 
 			if(count_members(input) != arity + 1) {
-				print_error(input, "missing or extra arguments\n");
+				print_error(input, "argument count error\n");
 				vm_finish();
 
 				return;
@@ -1338,7 +1343,7 @@ void vm_step() {
 		// (vm-quote () (input environment))
 		case OP_VM_QUOTE: {
 			if(count_members(input) != 2) {
-				print_error(input, "missing or extra arguments\n");
+				print_error(input, "argument count error\n");
 				vm_finish();
 
 				return;
@@ -1376,7 +1381,7 @@ void vm_step() {
 				data_pop();
 
 				if(result == atom_true) {
-					if(current_pair->get_head_pointer()->get_next_pointer() == nullptr) {
+					if(current_pair->get_pointer(1) == nullptr) {
 						// No consequent: just evaluate to the empty list
 
 						vm_pop();
@@ -1385,7 +1390,7 @@ void vm_step() {
 						return;
 					}
 
-					if(current_pair->get_head_pointer()->get_next_pointer()->get_next_pointer() == nullptr) {
+					if(current_pair->get_pointer(2) == nullptr) {
 						LispNodeRC current_consequent = current_pair->head->next->item;
 
 						vm_pop();
@@ -1393,7 +1398,7 @@ void vm_step() {
 					}
 					else {
 						// The consequent is a sequence of operations
-						LispNodeRC current_consequent = LispNode::make_list(current_pair->get_head_pointer()->get_next_pointer());
+						LispNodeRC current_consequent = LispNode::make_list(current_pair->get_pointer(1));
 
 						vm_pop();
 						vm_push_operation(OP_VM_BEGIN, current_consequent, environment, VMState::Begin{OP_BEGIN});
@@ -1481,11 +1486,11 @@ void vm_step() {
 
 			bool is_define_lambda = argument1->is_list();
 
-			LispNodeRC symbol = is_define_lambda ? argument1->head->item : input->head->next->item;
+			const LispNodeRC &symbol = is_define_lambda ? argument1->head->item : input->head->next->item;
 
 			if(waiting == false) {
 				if(count_members(input) < 3) {
-					print_error(input, "missing arguments\n");
+					print_error(input, "argument count error\n");
 					vm_finish();
 
 					return;
@@ -1502,7 +1507,7 @@ void vm_step() {
 
 				if(is_define_lambda) {
 					LispNodeRC lambda_parameters = make_cdr(argument1);
-					LispNodeRC lambda_expression = LispNode::make_list(input->get_head_pointer()->get_next_pointer()->get_next_pointer());
+					LispNodeRC lambda_expression = LispNode::make_list(input->get_pointer(2));
 
 					expression = make_cons(make_operator(OP_LAMBDA), make_cons(lambda_parameters, lambda_expression));
 				}
@@ -1706,61 +1711,6 @@ void vm_step() {
 
 			return;
 		}
-		// (vm-load (<type>, <waiting>) (input environment))
-		case OP_VM_LOAD: {
-#ifdef INITIAL_ENVIRONMENT
-			int type = vm_state.load.type;
-			bool &waiting = vm_state.load.waiting;
-
-			if(waiting == false) {
-				if(count_members(input) != 2) {
-					print_error(input, "missing or extra arguments\n");
-					vm_finish();
-
-					return;
-				}
-
-				const LispNodeRC &symbol = input->head->next->item;
-
-				vm_push_operation(OP_VM_EVAL, symbol, environment, VMState::Eval{});
-
-				waiting = true;
-			}
-			else {
-				LispNodeRC evaluated_symbol = data_peek();
-				data_pop();
-
-				if(type == OP_LOAD) {
-					int index;
-					const char *value = nullptr;
-
-					if((index = get_lambda_index(evaluated_symbol->data)) != -1) {
-						value = lambda_strings[index];
-					}
-
-					if((index = get_macro_index(evaluated_symbol->data)) != -1) {
-						value = macro_strings[index];
-					}
-
-					LispNodeRC load_expression = make3(make_operator(OP_DEFINE), evaluated_symbol, parse_expression(value, false));
-
-					vm_pop();
-					vm_push_operation(OP_VM_EVAL, load_expression, environment, VMState::Eval{});
-				}
-				else {
-					LispNodeRC unload_expression = make3(make_operator(OP_SET_E), evaluated_symbol, atom_false);
-
-					vm_pop();
-					vm_push_operation(OP_VM_EVAL, input, environment, VMState::Eval{});
-				}
-			}
-#else
-			print_error("vm-load", "no compiled support\n");
-			vm_finish();
-#endif /* INITIAL_ENVIRONMENT */
-
-			return;
-		}
 		// (vm-call <arity> (input environment))
 		case OP_VM_CALL: {
 			unsigned int arity = vm_state.call.arity;
@@ -1774,7 +1724,7 @@ void vm_step() {
 				data_pop();
 
 				if(!evaluated_input->is_list()) {
-					print_error(input, "last argument must be list\n");
+					print_error(input, "argument type error\n");
 					vm_finish();
 
 					return;
@@ -1886,13 +1836,13 @@ LispNodeRC eval_expression(const LispNodeRC input, const LispNodeRC environment)
 
 	while(vm_top > 0) {
 		if(vm_top >= EVALUATION_STACK_SIZE) {
-			fputs("Eval stack overflow; use tail-recursion\n", stdout);
+			fputs("Stack overflow; use tail-recursion\n", stdout);
 
 			return nullptr;
 		}
 
 		if(data_top >= DATA_STACK_SIZE) {
-			fputs("Data stack overflow; use tail-recursion\n", stdout);
+			fputs("Stack overflow; use tail-recursion\n", stdout);
 
 			return nullptr;
 		}

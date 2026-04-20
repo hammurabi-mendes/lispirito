@@ -77,10 +77,6 @@ const char *operator_names[] = {
     "mem-copy",
     "mem-addr",
 
-    // Dynamic definition load/unload
-    "load",
-    "unload",
-
     // VM operators
     "vm-first",
     "vm-normal",
@@ -173,10 +169,6 @@ ReduceMode operator_reduce_modes[] = {
     Normal3,
     Normal3,
     Normal1,
-
-    // Dynamic definition load/unload
-    SpecialLoad,
-    SpecialLoad,
 
     // VM operators
     VM,

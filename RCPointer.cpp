@@ -3,7 +3,6 @@
 
 #include "LispNode.h"
 
-#ifdef REFERENCE_COUNTING
 template<typename T>
 void RCPointer<T>::set(T *pointer_new) noexcept {
     if(pointer_new) {
@@ -25,5 +24,3 @@ void RCPointer<T>::set(T *pointer_new) noexcept {
 // Definition of the pointer setting functions
 template void RCPointer<LispNode>::set(LispNode *pointer_new) noexcept;
 template void RCPointer<Box>::set(Box *pointer_new) noexcept;
-
-#endif /* REFERENCE_COUNTING */

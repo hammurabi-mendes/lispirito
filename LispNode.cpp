@@ -13,7 +13,7 @@ LispNode::~LispNode() {
 		}
 	}
 
-	// Forces the deletion of all elements in the list if REFERENCE_COUNTING is defined
+	// Forces the deletion of all elements in the list with reference counting
 	if(type == LispType::List) {
 		head = nullptr;
 	}
@@ -55,6 +55,16 @@ LispNode *LispNode::make_list(Box *head) {
 	LispNode *result = new LispNode(LispType::List);
 
 	result->head = head;
+
+	return result;
+}
+
+Box *LispNode::get_pointer(int position) const {
+	Box *result = get_head_pointer();
+
+	for(int i = 0; i < position; i++) {
+		result = result->get_next_pointer();
+	}
 
 	return result;
 }

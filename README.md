@@ -20,7 +20,7 @@ and `apply` (Function Application) subroutines in the code, as discussed in the 
 
 ## Supported features
 
-We support a a good subset of the Scheme R7RS-small specification:
+We support a a good subset of the Scheme R7RS-small specification and C-style memory operations:
 
 - "McCarthy" operators: `quote`, `car`, `cdr`, `atom?`, `eq?`, `cons`, `cond`, `lambda`, `eval`, `define`
 - Association and substitution: `assoc`, `subst`
@@ -35,7 +35,7 @@ We support a a good subset of the Scheme R7RS-small specification:
 - Environment and macro support: `begin`, `let`, `let*`, `set!`, `macro`, `read`, `write`, `current-environment`
 - Low-level memory operations (C-style): `mem-alloc`, `mem-read`, `mem-write`, `mem-fill`, `mem-copy`, `mem-addr`
 
-If you compile with `INITIAL_ENVIRONMENT=1`, you can use many of the expected functions like `map`, `filter` by loading them with `(load 'map)`, `(load 'filter)`, etc. Alternatively, you can **download the minimal release and type/paste the definitions of the functions in  [environment.lsp](environment.lsp).** All functions are still available in the minimal release, you just have to type/paste them from [environment.lsp](environment.lsp).
+If you **type/paste the definitions of the functions in  [environment.lsp](environment.lsp).**, you get access to other expected routines:
   - Functional operators: `map`, `foldl`, `foldr`, `filter`
   - List operations: `length`, `reverse`, `append`, `list`, `list?`
   - Other arithmetic operators: `abs`, `modulo`
@@ -61,10 +61,7 @@ Lambda definitions create *closures*, and `cond`, `and/or`, and `begin` are all 
 If you are building **Lispirito** in a modern system, just a simple `make clean; make install` should work.
 To include debugging, use `make DEBUG=1` as your build command.
 
-If you are building for 6502 platforms, use `make clean; make TARGET_6502=1`. To include some standard lambdas and macros, use `make clean; make TARGET_6502=1 INITIAL_ENVIROMENT=1` as your build command. Make sure you have heap memory for this! If you do not, you can exclude the initial environment and:
-
-- Type the definitions you want in the REPL, maximally saving space; or
-- Edit the `lambdas.h` and `macros.h` files to include only the definitions you need.
+If you are building for 6502 platforms, use `make clean; make TARGET_6502=1`.
 
 If you are compiling **Lispirito** for MOS 6502 (in particular Ben Eater's machine), first download the LLVM-MOS SDK
 in the link below, and place it alongside this project directory. You might want to adjust the `CXX` location in your

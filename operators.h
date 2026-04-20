@@ -71,9 +71,6 @@ enum LispOperation {
     OP_MEM_COPY,
     OP_MEM_ADDR,
 
-    OP_LOAD,
-    OP_UNLOAD,
-
     OP_VM_FIRST,
     OP_VM_NORMAL,
     OP_VM_QUOTE,
@@ -98,7 +95,6 @@ enum ReduceMode : unsigned char {
     SpecialBegin,
     SpecialDefine,
     SpecialEval,
-    SpecialLoad,
     Normal0,
     Normal1,
     Normal2,

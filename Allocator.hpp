@@ -10,10 +10,18 @@
 
 #include "circular_queue.h"
 
+// Type-erased backing functions for all allocator instances
+
+void *allocate_generic(CircularQueue &queue, size_t size, uint8_t tag);
+void deallocate_generic(void *pointer) noexcept;
+bool process_deletions_generic(CircularQueue &queue, uint8_t tag);
+void reinit_generic(CircularQueue &queue, uint8_t tag);
+
 template<typename T>
 class Allocator {
 private:
     static CircularQueue deletion_queue;
+    static constexpr uint8_t TAG = UINT8_MAX;
 
 public:
     static void init() {
@@ -21,22 +29,11 @@ public:
     }
 
     static void *allocate(size_t size) {
-        T *recycled;
-
-        if((recycled = static_cast<T *>(deletion_queue.dequeue())) != nullptr) {
-            recycled->~T();
-
-            return recycled;
-        }
-
-        CounterType *pointer = (CounterType *) Allocate(size + sizeof(CounterType));
-        *pointer = 0;
-
-        return pointer + 1;
+        return allocate_generic(deletion_queue, size, TAG);
     }
 
     static void deallocate(void *pointer) noexcept {
-        Deallocate(((CounterType *) pointer) - 1);
+        deallocate_generic(pointer);
     }
 
     static void enqueue_for_deletion(T *pointer) {
@@ -48,36 +45,12 @@ public:
         // takes care that the deletion queue does not get overflown again,
         // using iteration instead of recursion
         if(deletion_queue.is_empty_or_overflown()) {
-            reinit();
+            reinit_generic(deletion_queue, TAG);
         }
     }
 
     static bool process_deletions() {
-        bool deleted = false;
-
-        while(!deletion_queue.is_empty_or_overflown()) {
-            T* pointer = static_cast<T*>(deletion_queue.dequeue());
-
-            delete pointer;
-            deleted = true;
-        }
-
-        return deleted;
-    }
-
-private:
-    static void reinit() {
-        T **old_deletion_queue = reinterpret_cast<T**>(deletion_queue.reinit());
-
-        for(size_t current = 0; current < CircularQueue::QUEUE_SIZE; current++) {
-            delete old_deletion_queue[current];
-
-            while(process_deletions() == true) {
-                // Keep cleaning...
-            }
-        }
-
-        delete[] old_deletion_queue;
+        return process_deletions_generic(deletion_queue, TAG);
     }
 };
 
@@ -89,6 +62,12 @@ template<>
 CircularQueue Allocator<LispNode>::deletion_queue;
 
 template<>
+constexpr uint8_t Allocator<LispNode>::TAG = 0;
+
+template<>
 CircularQueue Allocator<Box>::deletion_queue;
+
+template<>
+constexpr uint8_t Allocator<Box>::TAG = 1;
 
 #endif /* ALLOCATOR_HPP */

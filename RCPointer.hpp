@@ -77,9 +77,7 @@ public:
     }
 
     ~RCPointer() {
-#ifdef REFERENCE_COUNTING
         set(nullptr);
-#endif /* REFERENCE_COUNTING */
     }
 
     T &operator*() const { return *pointer; }
@@ -90,14 +88,8 @@ public:
     }
 
 private:
-#ifdef REFERENCE_COUNTING
     // Declaration of the pointer setting functions
     void set(T *pointer_new) noexcept;
-#else
-    inline void set(T *pointer_new) noexcept {
-        pointer = pointer_new;
-    }
-#endif /* REFERENCE_COUNTING */
 };
 
 #endif /* RCPOINTER_HPP */

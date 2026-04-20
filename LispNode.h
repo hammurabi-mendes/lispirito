@@ -55,6 +55,8 @@ public:
 		return head.get_pointer();
 	}
 
+	Box *get_pointer(int position) const;
+
 	bool operator==(const LispNode &other) const;
 
 	bool is_atom() const;
