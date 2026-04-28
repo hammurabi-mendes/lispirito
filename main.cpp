@@ -727,6 +727,7 @@ LispNodeRC eval_gen1(const LispNodeRC &input, const LispNodeRC &environment) {
 		case OP_READ: {
 			char *input_string;
 			
+#ifdef IO_AVAILABLE
 			do {
 				input_string = read_expression(output1->type == LispType::AtomData ? ((FILE *) output1->data) : stdin);
 
@@ -734,10 +735,14 @@ LispNodeRC eval_gen1(const LispNodeRC &input, const LispNodeRC &environment) {
 					return list_empty;
 				}
 			} while(empty_lisp_expression(input_string));
+#else
+				input_string = read_expression(stdin);
+#endif // IO_AVAILABLE
 
 			return parse_expression(input_string);
 		}
 		case OP_CLOSE:
+#ifdef IO_AVAILABLE
 			if(!output1->is_data()) {
 				return nullptr;
 			}
@@ -746,6 +751,9 @@ LispNodeRC eval_gen1(const LispNodeRC &input, const LispNodeRC &environment) {
 			output1->data = nullptr; // This is necessary because fclose frees the FILE structure
 
 			return list_empty;
+#else
+			break;
+#endif // IO_AVAILABLE
 		case OP_MEM_ALLOC:
 			result = new LispNode(LispType::AtomData);
 			result->data = static_cast<char *>(malloc(output1->number_i));
@@ -849,6 +857,7 @@ LispNodeRC eval_gen2(const LispNodeRC &input, const LispNodeRC &environment) {
 			return atom_true;
 		}
 		case OP_OPEN: {
+#ifdef IO_AVAILABLE
 			if(!output1->is_string() || !output2->is_string()) {
 				return nullptr;
 			}
@@ -860,9 +869,16 @@ LispNodeRC eval_gen2(const LispNodeRC &input, const LispNodeRC &environment) {
 			}
 
 			return LispNode::make_data(LispType::AtomData, static_cast<void *>(descriptor));
+#else
+			break;
+#endif //IO_AVAILABLE
 		}
     	case OP_WRITE: {
+#ifdef IO_AVAILABLE
 			output1->print(output2->type == LispType::AtomData ? ((FILE *) output2->data) : stdout);
+#else
+			output1->print(stdout);
+#endif //IO_AVAILABLE
 
 			return list_empty;
 		}

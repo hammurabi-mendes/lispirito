@@ -35,6 +35,8 @@ Real atof(char *input);
 
 	#define fgets(buffer, size, descriptor) c64_fgets(buffer, size, ((C64_FILE *) descriptor))
 	#define fputs(buffer, descriptor)       c64_fputs(buffer, ((C64_FILE *) descriptor))
+
+	#define IO_AVAILABLE 1
 #endif // TARGET_C64
 
 #endif /* EXTRA_H */
