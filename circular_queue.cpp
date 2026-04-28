@@ -16,7 +16,7 @@ void CircularQueue::init() {
     tail = 0;
 }
 
-void** CircularQueue::reinit() {
+void **CircularQueue::reinit() {
     void **old_queue = queue;
 
     init();

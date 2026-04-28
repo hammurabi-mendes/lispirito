@@ -32,15 +32,16 @@ We support a a good subset of the Scheme R7RS-small specification and C-style me
 - Arithmetic comparison operators: `<`, `=`, `>`, `<=`, `>=`
 - Logical operators: `and`, `or`, `not`
     - If you want an n-ary `and`/`or`, use `apply` together with `and`/`or`
-- Environment and macro support: `begin`, `let`, `let*`, `set!`, `macro`, `read`, `write`, `current-environment`
+- Environment and macro support: `begin`, `let`, `let*`, `set!`, `macro`, `current-environment`
 - Low-level memory operations (C-style): `mem-alloc`, `mem-read`, `mem-write`, `mem-fill`, `mem-copy`, `mem-addr`
+  - Display support: `display`, `newline`
+- I/O on the Commodore 64: `open`, `close`, `read`, `write`
 
 If you **type/paste the definitions of the functions in  [environment.lsp](environment.lsp).**, you get access to other expected routines:
   - Functional operators: `map`, `foldl`, `foldr`, `filter`
-  - List operations: `length`, `reverse`, `append`, `list`, `list?`
+  - List utilities: `length`, `reverse`, `append`, `list`, `list?`
   - Other arithmetic operators: `abs`, `modulo`
   - String support: `list->string`, `string->list`, `string-length`, `string-append`, `string-ref`, `string-set!`, `make-string`, `substring`
-  - Display support: `display`, `newline`
   - Function application operator: `apply`
   - Scope and control operators: `if`, `letrec`
   
@@ -53,7 +54,6 @@ Lambda definitions create *closures*, and `cond`, `and/or`, and `begin` are all 
 ## Future plans
 
 - Support for `call/cc`
-- Support for I/O for C64 (later to other platforms)
 - Versions for DOS, Amiga, and BSD 2.11 on a PDP-11. Building and running on modern systems should be already trivial.
 
 ## Building
@@ -61,7 +61,7 @@ Lambda definitions create *closures*, and `cond`, `and/or`, and `begin` are all 
 If you are building **Lispirito** in a modern system, just a simple `make clean; make install` should work.
 To include debugging, use `make DEBUG=1` as your build command.
 
-If you are building for 6502 platforms, use `make clean; make TARGET_6502=1`.
+If you are building for 6502 platforms, use `make clean; make TARGET_6502=1`. If you are building for the Commodore 64, use `make clean; make TARGET_6502=1 TARGET_C64=1`.
 
 If you are compiling **Lispirito** for MOS 6502 (in particular Ben Eater's machine), first download the LLVM-MOS SDK
 in the link below, and place it alongside this project directory. You might want to adjust the `CXX` location in your
