@@ -62,6 +62,8 @@ enum LispOperation {
     OP_APPLY,
     OP_READ,
     OP_WRITE,
+    OP_OPEN,
+    OP_CLOSE,
     OP_CURRENT_ENVIRONMENT,
 
     OP_MEM_ALLOC,
@@ -80,7 +82,6 @@ enum LispOperation {
     OP_VM_BEGIN,
     OP_VM_APPLY,
     OP_VM_EVAL,
-    OP_VM_LOAD,
     OP_VM_CALL,
     OP_VM_EVAL_LIST,
     OP_VM_DEFINE_LIST

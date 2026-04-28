@@ -20,6 +20,11 @@ void *allocate_generic(CircularQueue &queue, size_t size, uint8_t tag) {
     }
 
     CounterType *pointer = (CounterType *) Allocate(size + sizeof(CounterType));
+    if(!pointer) {
+        fputs("Out of memory: halt", stdout);
+
+        exit(EXIT_FAILURE);
+    }
     *pointer = 0;
 
     return pointer + 1;

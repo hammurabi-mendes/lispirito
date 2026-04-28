@@ -10,10 +10,6 @@
 
 #include "extra.h"
 
-#ifdef TARGET_C64
-	#include "terminal.h"
-#endif // TARGET_C64
-
 #include "LispNode.h"
 
 constexpr unsigned int MAX_EXPRESSION_SIZE = 1024;
@@ -37,8 +33,8 @@ LispNodeRC global_environment;
 LispNodeRC *context_environment;
 
 // Forward declarations
-char *read_expression();
-LispNodeRC parse_expression(const char *buffer, bool deallocate_buffer);
+char *read_expression(FILE *descriptor);
+LispNodeRC parse_expression(const char *buffer);
 LispNodeRC eval_expression(LispNodeRC input, LispNodeRC environment);
 
 void print_error(const LispNodeRC &input, const char *message) {
@@ -51,6 +47,21 @@ void print_error(const char *context, const char *message) {
 	fputs(context, stdout);
 	fputs(": ", stdout);
 	fputs(message, stdout);
+}
+
+bool empty_lisp_expression(const char *message) {
+	for(const char *current = message; *current != '\0'; current++) {
+		if(!isspace(*current)) {
+			return false;
+		}
+
+		// Ignore commented sections
+		if(*current == ';') {
+			break;
+		}
+	}
+
+	return true;
 }
 
 int string_index(const char *query, const char **list, int maximum) {
@@ -202,26 +213,34 @@ LispNodeRC make_substitution(const LispNodeRC &old_symbol, const LispNodeRC &new
 
 // Parsing
 
-char *read_expression() {
-	// Allocated here and deallocated in parse_buffer()
-	char *read_buffer = static_cast<char *>(Allocate(MAX_EXPRESSION_SIZE));
+char *read_expression(FILE *descriptor = stdin) {
+	// Allocated here once
+	static char *read_buffer = static_cast<char *>(Allocate(MAX_EXPRESSION_SIZE));
 
-#ifdef TARGET_C64
-	join_lines = true;
-	join_character = '\n';
-
-	int result = terminal_getline(read_buffer, MAX_EXPRESSION_SIZE, false);
-
-	for(int i = 0; i < result; i++) {
-		if(read_buffer[i] == ';') {
-			read_buffer[i] = '\n';
-			read_buffer[i + 1] = '\0';
-
-			break;
-		}
+	// This should never happen
+	if(!read_buffer) {
+        fputs("Out of memory: halt", stdout);
+		return nullptr;
 	}
 
-	return read_buffer;
+#ifdef TARGET_C64
+	if(descriptor == stdin) {
+		join_lines = true;
+		join_character = '\n';
+
+		int result = terminal_getline(read_buffer, MAX_EXPRESSION_SIZE, false);
+
+		for(int i = 0; i < result; i++) {
+			if(read_buffer[i] == ';') {
+				read_buffer[i] = '\n';
+				read_buffer[i + 1] = '\0';
+
+				break;
+			}
+		}
+
+		return read_buffer;
+	}
 #endif // TARGET_C64
 
 	int nread = 0;
@@ -231,7 +250,7 @@ char *read_expression() {
 	while(true) {
 		char *last_line;
 
-		if((last_line = fgets(read_buffer + nread, MAX_EXPRESSION_SIZE - nread, stdin)) == nullptr) {
+		if((last_line = fgets(read_buffer + nread, MAX_EXPRESSION_SIZE - nread, descriptor)) == nullptr) {
 			break;
 		}
 
@@ -264,8 +283,7 @@ char *read_expression() {
 	}
 
 	if(nread == 0) {
-		Deallocate(read_buffer);
-		read_buffer = nullptr;
+		return nullptr;
 	}
 
 	return read_buffer;
@@ -527,7 +545,7 @@ LispNode *parse_expression(const char *buffer, size_t buffer_length, size_t &pos
 	return parse_atom(token);
 }
 
-LispNodeRC parse_expression(const char *buffer, bool deallocate_buffer = true) {
+LispNodeRC parse_expression(const char *buffer) {
 	// Initial token position
 	size_t position = 0;
 
@@ -535,11 +553,6 @@ LispNodeRC parse_expression(const char *buffer, bool deallocate_buffer = true) {
 	bool error = false;
 
 	LispNodeRC result = parse_expression(buffer, strlen(buffer), position, error);
-
-	// Allocated in read_expression() and deallocated here
-	if(deallocate_buffer) {
-		Deallocate(const_cast<char *>(buffer));
-	}
 
 	if(error == true) {
 		return nullptr;
@@ -568,15 +581,6 @@ LispNodeRC eval_gen0(const LispNodeRC &input, const LispNodeRC &environment) {
 	int operation_index = operator_name->number_i;
 
 	switch(operation_index) {
-		case OP_READ: {
-			char *input_string = read_expression();
-
-			if(input_string == nullptr) {
-				break;
-			}
-
-			return parse_expression(input_string);
-		}
     	case OP_NEWLINE: {
 			fputs("\n", stdout);
 
@@ -717,8 +721,29 @@ LispNodeRC eval_gen1(const LispNodeRC &input, const LispNodeRC &environment) {
 			return output1;
 		}
     	case OP_DISPLAY:
-    	case OP_WRITE:
 			output1->print();
+
+			return list_empty;
+		case OP_READ: {
+			char *input_string;
+			
+			do {
+				input_string = read_expression(output1->type == LispType::AtomData ? ((FILE *) output1->data) : stdin);
+
+				if(input_string == nullptr) {
+					return list_empty;
+				}
+			} while(empty_lisp_expression(input_string));
+
+			return parse_expression(input_string);
+		}
+		case OP_CLOSE:
+			if(!output1->is_data()) {
+				return nullptr;
+			}
+
+			fclose((FILE *) output1->data);
+			output1->data = nullptr; // This is necessary because fclose frees the FILE structure
 
 			return list_empty;
 		case OP_MEM_ALLOC:
@@ -822,6 +847,24 @@ LispNodeRC eval_gen2(const LispNodeRC &input, const LispNodeRC &environment) {
 			*((volatile char *) output1->number_i) = ((char) output2->number_i);
 
 			return atom_true;
+		}
+		case OP_OPEN: {
+			if(!output1->is_string() || !output2->is_string()) {
+				return nullptr;
+			}
+
+			FILE *descriptor = fopen(output1->data, output2->data);
+
+			if (!descriptor) {
+				return nullptr;
+			}
+
+			return LispNode::make_data(LispType::AtomData, static_cast<void *>(descriptor));
+		}
+    	case OP_WRITE: {
+			output1->print(output2->type == LispType::AtomData ? ((FILE *) output2->data) : stdout);
+
+			return list_empty;
 		}
 	}
 
@@ -986,122 +1029,27 @@ LispNodeRC make_lambda_macro_application(const LispNodeRC &input, const LispNode
 // VM data structures, variables and functions
 
 struct VMStackFrame {
-	int op;
+	int8_t op;
+	bool waiting;
+
+	uint8_t type;
+	uint8_t arity;
+
 	LispNodeRC input;
 	LispNodeRC environment;
-	LispNodeRC extra1;
 
-	union State {
-		struct Apply {
-			bool closure_mode;
-			bool waiting;
-			unsigned int arity;
+	LispNodeRC *saved_context_environment; // For OP_VM_BEGIN and OP_VM_LET
+	LispNodeRC extra;                      // For closure identification on tail recursion
 
-			Apply(bool closure_mode, unsigned int arity): closure_mode{closure_mode}, waiting{false}, arity{arity} {}
-		} apply;
+#ifdef TARGET_6502
+	uint8_t _pad[6];                       // Pad to 16B to ease the 6502
+#endif // TARGET_6502
 
-		struct First {
-			bool waiting;
-
-			First(): waiting{false} {}
-		} first;
-
-		struct Normal {
-			unsigned int arity;
-
-			Normal(unsigned int arity): arity{arity} {}
-		} normal;
-
-		struct Quote {
-			Quote() {}
-		} quote;
-
-		struct Cond {
-			bool waiting;
-
-			Cond(): waiting{false} {}
-		} cond;
-
-		struct Logic {
-			int type;
-			bool waiting;
-
-			Logic(int type): type{type}, waiting{false} {}
-		} logic;
-
-		struct Define {
-			int type;
-			bool waiting;
-
-			Define(int type): type{type}, waiting{false} {}
-		} define;
-
-		struct Begin {
-			int type;
-			bool waiting;
-			LispNodeRC *saved_context_environment;
-
-			Begin(int type): type{type}, waiting{false}, saved_context_environment{nullptr} {}
-		} begin;
-
-		struct Eval {
-			Eval() {}
-		} eval;
-
-		struct Load {
-			int type;
-			bool waiting;
-
-			Load(int type): type{type}, waiting{false} {}
-		} load;
-
-		struct Call {
-			unsigned int arity;
-
-			Call(unsigned int arity): arity{arity} {}
-		} call;
-
-		struct EvalList {
-			bool discard_intermediary;
-			bool waiting;
-
-			EvalList(bool discard_intermediary): discard_intermediary{discard_intermediary}, waiting{false} {}
-		} eval_list;
-
-		struct DefineList {
-			int type;
-			bool waiting;
-
-			DefineList(int type): type{type}, waiting{false} {}
-		} define_list;
-
-		State(): apply{false, 0} {}
-
-		~State() {
-		}
-
-		State(const Apply &apply): apply{apply} {}
-		State(const First &first): first{first} {}
-		State(const Normal &normal): normal{normal} {}
-		State(const Quote &quote): quote{quote} {}
-		State(const Cond &cond): cond{cond} {}
-		State(const Logic &logic): logic{logic} {}
-		State(const Define &define): define{define} {}
-		State(const Begin &begin): begin{begin} {}
-		State(const Eval &eval): eval{eval} {}
-		State(const Load &load): load{load} {}
-		State(const Call &call): call{call} {}
-		State(const EvalList &eval_list): eval_list{eval_list} {}
-		State(const DefineList &define_list): define_list{define_list} {}
-	} vm_state;
-
-	VMStackFrame(): op(0), input(nullptr), environment(nullptr), vm_state{State(State::Eval())} {}
-	VMStackFrame(int op, const LispNodeRC &input, const LispNodeRC &environment, const State &vm_state): op(op), input(input), environment(environment), vm_state{vm_state} {}
-
-	~VMStackFrame() {}
+	VMStackFrame(): op{0}, waiting{false},
+	                type{0}, arity{0},
+	                input{nullptr}, environment{nullptr},
+	                saved_context_environment{nullptr}, extra{nullptr} {}
 };
-
-using VMState = VMStackFrame::State;
 
 constexpr int EVALUATION_STACK_SIZE = 128;
 constexpr int DATA_STACK_SIZE = 128;
@@ -1115,17 +1063,46 @@ unsigned int data_top;
 unsigned int vm_maximum;
 unsigned int data_maximum;
 
-void vm_push_operation(int op, const LispNodeRC &input, const LispNodeRC &environment, const VMState &state) {
-	evaluation_stack[vm_top].op = op;
-	evaluation_stack[vm_top].input = input;
-	evaluation_stack[vm_top].environment = environment;
-	evaluation_stack[vm_top].vm_state = state;
+VMStackFrame *vm_push_operation(int8_t op, const LispNodeRC &input, const LispNodeRC &environment) {
+	VMStackFrame *frame = &evaluation_stack[vm_top];
+
+	frame->op = op;
+	frame->waiting = false;
+
+	frame->input = input;
+	frame->environment = environment;
+
+	frame->type = 0;
+	frame->arity = 0;
+	frame->extra = list_empty;
+	frame->saved_context_environment = nullptr;
 
 	vm_top++;
 
 	if(vm_top > vm_maximum) {
 		vm_maximum = vm_top;
 	}
+
+	return frame;
+}
+
+inline void vm_push_type(int8_t op, const LispNodeRC &input, const LispNodeRC &environment, uint8_t type) {
+	VMStackFrame *frame = vm_push_operation(op, input, environment);
+
+	frame->type = type;
+}
+
+inline void vm_push_arity(int8_t op, const LispNodeRC &input, const LispNodeRC &environment, uint8_t arity) {
+	VMStackFrame *frame = vm_push_operation(op, input, environment);
+
+	frame->arity = arity;
+}
+
+inline void vm_push_type_arity(int8_t op, const LispNodeRC &input, const LispNodeRC &environment, uint8_t type, uint8_t arity) {
+	VMStackFrame *frame = vm_push_operation(OP_VM_APPLY, input, environment);
+
+	frame->type = type;
+	frame->arity = arity;
 }
 
 inline VMStackFrame &vm_peek() {
@@ -1204,12 +1181,12 @@ bool eval_reduce(const LispNodeRC &input, const LispNodeRC &environment) {
 		switch(operation_reduce_mode) {
 			case SpecialQuote:
 				// Special: does not evaluate
-				vm_push_operation(OP_VM_QUOTE, input, environment, VMState::Quote{});
+				vm_push_operation(OP_VM_QUOTE, input, environment);
 				return true;
 
 			case SpecialCond:
 				// Special:
-				vm_push_operation(OP_VM_COND, make_cdr(input), environment, VMState::Cond{});
+				vm_push_operation(OP_VM_COND, make_cdr(input), environment);
 				return true;
 
 			case Normal0:
@@ -1217,26 +1194,26 @@ bool eval_reduce(const LispNodeRC &input, const LispNodeRC &environment) {
 			case Normal2:
 			case Normal3:
 				// Normal:
-				vm_push_operation(OP_VM_NORMAL, input, environment, VMState::Normal{(unsigned int) (operation_reduce_mode - Normal0)});
+				vm_push_arity(OP_VM_NORMAL, input, environment, (uint8_t) (operation_reduce_mode - Normal0));
 				return true;
 
 			case SpecialLogic:
 				// Special:
-				vm_push_operation(OP_VM_LOGIC, make_cdr(input), environment, VMState::Logic{operation_index});
+				vm_push_type(OP_VM_LOGIC, make_cdr(input), environment, (uint8_t) operation_index);
 				return true;
 
 			case SpecialBegin:
 				// Special:
-				vm_push_operation(OP_VM_BEGIN, make_cdr(input), make_environment(environment), VMState::Begin{operation_index});
+				vm_push_type(OP_VM_BEGIN, make_cdr(input), make_environment(environment), (uint8_t) operation_index);
 				return true;
 
 			case SpecialDefine:
 				// Special:
-				vm_push_operation(OP_VM_DEFINE, input, environment, VMState::Define{operation_index});
+				vm_push_type(OP_VM_DEFINE, input, environment, (uint8_t) operation_index);
 				return true;
 
 			case SpecialEval:
-				vm_push_operation(OP_VM_EVAL, input, environment, VMState::Eval{});
+				vm_push_operation(OP_VM_EVAL, input, environment);
 				return true;
 
 			case ImmediateLambda:
@@ -1253,7 +1230,7 @@ bool eval_reduce(const LispNodeRC &input, const LispNodeRC &environment) {
 
 			case NormalX:
 				// Normal:
-				vm_push_operation(OP_VM_NORMAL, input, environment, VMState::Normal{count_members(input) - 1});
+				vm_push_arity(OP_VM_NORMAL, input, environment, (uint8_t) (count_members(input) - 1));
 				return true;
 			
 			default:
@@ -1271,12 +1248,12 @@ bool eval_reduce(const LispNodeRC &input, const LispNodeRC &environment) {
 	bool is_macro = first->is_operation(OP_MACRO);
 
 	if(is_closure || is_macro) {
-		vm_push_operation(OP_VM_APPLY, input, environment, VMState::Apply{is_closure, count_members(input) - 1});
+		vm_push_type_arity(OP_VM_APPLY, input, environment, (uint8_t) is_closure, (uint8_t) (count_members(input) - 1));
 		return true;
 	}
 
 	if((first->is_atom() && first->is_pure()) || first->is_list()) {
-		vm_push_operation(OP_VM_FIRST, input, environment, VMState::First{});
+		vm_push_operation(OP_VM_FIRST, input, environment);
 		return true;
 	}
 
@@ -1288,9 +1265,6 @@ bool eval_reduce(const LispNodeRC &input, const LispNodeRC &environment) {
 void vm_step() {
 	VMStackFrame &top = vm_peek();
 
-	// Reference, because we typically modify state
-	VMState &vm_state = top.vm_state;
-
 	LispNodeRC input = top.input;
 	LispNodeRC environment = top.environment;
 
@@ -1299,10 +1273,10 @@ void vm_step() {
 	switch(operation_index) {
 		// (vm-first <waiting> (input environment))
 		case OP_VM_FIRST: {
-			bool &waiting = vm_state.first.waiting;
+			bool &waiting = top.waiting;
 
 			if(waiting == false) {
-				vm_push_operation(OP_VM_EVAL, input->head->item, environment, VMState::Eval{});
+				vm_push_operation(OP_VM_EVAL, input->head->item, environment);
 				waiting = true;
 			}
 			else {
@@ -1310,11 +1284,11 @@ void vm_step() {
 
 				if(result != input->head->item) {
 					vm_pop();
-					vm_push_operation(OP_VM_EVAL, make_cons(result, make_cdr(input)), environment, VMState::Eval{});
+					vm_push_operation(OP_VM_EVAL, make_cons(result, make_cdr(input)), environment);
 				}
 				else {
 					vm_pop();
-					vm_push_operation(OP_VM_EVAL, input, environment, VMState::Eval{});
+					vm_push_operation(OP_VM_EVAL, input, environment);
 				}
 
 				data_pop();
@@ -1324,7 +1298,7 @@ void vm_step() {
 		}
 		// (vm-normal <arity> (input environment))
 		case OP_VM_NORMAL: {
-			unsigned int arity = vm_state.normal.arity;
+			uint8_t arity = top.arity;
 
 			if(count_members(input) != arity + 1) {
 				print_error(input, "argument count error\n");
@@ -1335,8 +1309,8 @@ void vm_step() {
 
 			vm_pop();
 
-			vm_push_operation(OP_VM_CALL, input, environment, VMState::Call{arity});
-			vm_push_operation(OP_VM_EVAL_LIST, make_cdr(input), environment, VMState::EvalList{false});
+			vm_push_arity(OP_VM_CALL, input, environment, arity);
+			vm_push_type(OP_VM_EVAL_LIST, make_cdr(input), environment, (uint8_t) false);
 
 			return;
 		}
@@ -1360,7 +1334,7 @@ void vm_step() {
 		case OP_VM_COND: {
 			LispNodeRC &evaluation_pairs = top.input;
 
-			bool &waiting = vm_state.cond.waiting;
+			bool &waiting = top.waiting;
 
 			if(waiting == false && evaluation_pairs == list_empty) {
 				vm_pop();
@@ -1373,7 +1347,7 @@ void vm_step() {
 			const LispNodeRC &current_test = current_pair->head->item;
 
 			if(waiting == false) {
-				vm_push_operation(OP_VM_EVAL, current_test, environment, VMState::Eval{});
+				vm_push_operation(OP_VM_EVAL, current_test, environment);
 				waiting = true;
 			}
 			else {
@@ -1394,14 +1368,14 @@ void vm_step() {
 						LispNodeRC current_consequent = current_pair->head->next->item;
 
 						vm_pop();
-						vm_push_operation(OP_VM_EVAL, current_consequent, environment, VMState::Eval{});
+						vm_push_operation(OP_VM_EVAL, current_consequent, environment);
 					}
 					else {
 						// The consequent is a sequence of operations
 						LispNodeRC current_consequent = LispNode::make_list(current_pair->get_pointer(1));
 
 						vm_pop();
-						vm_push_operation(OP_VM_BEGIN, current_consequent, environment, VMState::Begin{OP_BEGIN});
+						vm_push_type(OP_VM_BEGIN, current_consequent, environment, (uint8_t) OP_BEGIN);
 					}
 
 					return;
@@ -1417,8 +1391,8 @@ void vm_step() {
 		case OP_VM_LOGIC: {
 			LispNodeRC &evaluation_items = top.input;
 
-			int type = vm_state.logic.type;
-			bool &waiting = vm_state.logic.waiting;
+			uint8_t type = top.type;
+			bool &waiting = top.waiting;
 
 			if(evaluation_items == list_empty) {
 				vm_pop();
@@ -1435,7 +1409,7 @@ void vm_step() {
 			}
 
 			if(waiting == false) {
-				vm_push_operation(OP_VM_EVAL, evaluation_items->head->item, environment, VMState::Eval{});
+				vm_push_operation(OP_VM_EVAL, evaluation_items->head->item, environment);
 				waiting = true;
 
 				return;
@@ -1464,7 +1438,7 @@ void vm_step() {
 				vm_pop();
 			}
 
-			vm_push_operation(OP_VM_EVAL, evaluation_items->head->item, environment, VMState::Eval{});
+			vm_push_operation(OP_VM_EVAL, evaluation_items->head->item, environment);
 
 			if(last_item) {
 				return;
@@ -1477,8 +1451,8 @@ void vm_step() {
 		}
 		// (vm-define (<OP_DEFINE/OP_SET_E> <waiting>) (input environment))
 		case OP_VM_DEFINE: {
-			int type = vm_state.define.type;
-			bool &waiting = vm_state.define.waiting;
+			uint8_t type = top.type;
+			bool &waiting = top.waiting;
 
 			const LispNodeRC &operation = input->head->item;
 			const LispNodeRC &argument1 = input->head->next->item;
@@ -1513,7 +1487,7 @@ void vm_step() {
 				}
 
 				// Evaluate using the provided environment
-				vm_push_operation(OP_VM_EVAL, expression, environment, VMState::Eval{});
+				vm_push_operation(OP_VM_EVAL, expression, environment);
 
 				waiting = true;
 			}
@@ -1541,8 +1515,8 @@ void vm_step() {
 		}
 		// (vm-define-list (definition_items environment))
 		case OP_VM_DEFINE_LIST: {
-			int type = vm_state.begin.type;
-			bool &waiting = vm_state.define_list.waiting;
+			uint8_t type = top.type;
+			bool &waiting = top.waiting;
 			LispNodeRC &definition_items = top.input;
 
 			if(waiting == false) {
@@ -1570,11 +1544,11 @@ void vm_step() {
 
 			if(type == OP_LET) {
 				// let
-				vm_push_operation(OP_VM_DEFINE, make_cons(make_operator(OP_DEFINE), current_definition), environment, VMState::Define{OP_DEFINE});
+				vm_push_type(OP_VM_DEFINE, make_cons(make_operator(OP_DEFINE), current_definition), environment, (uint8_t) OP_DEFINE);
 			}
 			else {
 				// let*
-				vm_push_operation(OP_VM_DEFINE, make_cons(make_operator(OP_DEFINE), current_definition), *context_environment, VMState::Define{OP_DEFINE});
+				vm_push_type(OP_VM_DEFINE, make_cons(make_operator(OP_DEFINE), current_definition), *context_environment, (uint8_t) OP_DEFINE);
 			}
 
 			definition_items = make_cdr(definition_items);
@@ -1584,9 +1558,9 @@ void vm_step() {
 		}
 		// (vm-begin (<OP_LET/OP_LET_STAR/OP_BEGIN> <waiting> <saved_context_environment>) ([begin or let (definitions)] statements environment))
 		case OP_VM_BEGIN: {
-			int type = vm_state.begin.type;
-			bool &waiting = vm_state.begin.waiting;
-			LispNodeRC *&saved_context_environment = vm_state.begin.saved_context_environment;
+			uint8_t type = top.type;
+			bool &waiting = top.waiting;
+			LispNodeRC *&saved_context_environment = top.saved_context_environment;
 
 			if(waiting == false) {
 				if(input == list_empty) {
@@ -1600,17 +1574,17 @@ void vm_step() {
 
 				if(type == OP_LET || type == OP_LET_STAR) {
 					// The first element of input is a definitions_list
-					vm_push_operation(OP_VM_EVAL_LIST, make_cdr(input), environment, VMState::EvalList{true});
+					vm_push_type(OP_VM_EVAL_LIST, make_cdr(input), environment, (uint8_t) true);
 				}
 				else {
-					vm_push_operation(OP_VM_EVAL_LIST, input, environment, VMState::EvalList{true});
+					vm_push_type(OP_VM_EVAL_LIST, input, environment, (uint8_t) true);
 				}
 				context_environment = &(vm_peek().environment);
 
 				if(type == OP_LET || type == OP_LET_STAR) {
 					LispNodeRC &definitions = input->head->item;
 
-					vm_push_operation(OP_VM_DEFINE_LIST, definitions, *context_environment, VMState::DefineList{type});
+					vm_push_type(OP_VM_DEFINE_LIST, definitions, *context_environment, type);
 				}
 
 				waiting = true;
@@ -1625,12 +1599,12 @@ void vm_step() {
 		}
 		// (vm-apply (<arity> <closure_mode> <waiting>) (input environment))
 		case OP_VM_APPLY: {
-			unsigned int arity = vm_state.apply.arity;
-			bool closure_mode = vm_state.apply.closure_mode;
-			bool &waiting = vm_state.apply.waiting;
+			uint8_t arity = top.arity;
+			bool closure_mode = (bool) top.type;
+			bool &waiting = top.waiting;
 
 			if(waiting == false && closure_mode == true) {
-				vm_push_operation(OP_VM_EVAL_LIST, make_cdr(input), environment, VMState::EvalList{false});
+				vm_push_type(OP_VM_EVAL_LIST, make_cdr(input), environment, (uint8_t) false);
 				waiting = true;
 			}
 			else {
@@ -1657,7 +1631,7 @@ void vm_step() {
 						if(vm_next.op == OP_VM_BEGIN) {
 							tail_begin_blocks_found++;
 
-							const LispNodeRC &current_closure = vm_next.extra1;
+							const LispNodeRC &current_closure = vm_next.extra;
 
 							if(current_closure == input->head->item) {
 								tail_situation = true;
@@ -1689,14 +1663,14 @@ void vm_step() {
 					for(size_t i = 0; i < tail_begin_blocks_found; i++) {
 						VMStackFrame &completed_begin = vm_peek();
 
-						context_environment = completed_begin.vm_state.begin.saved_context_environment;
+						context_environment = completed_begin.saved_context_environment;
 
 						vm_pop();
 					}
 				}
 
-				vm_push_operation(OP_VM_BEGIN, new_expression, new_environment, VMState::Begin{OP_BEGIN});
-				vm_peek().extra1 = closure_mode ? input->head->item.get_pointer() : list_empty;
+				vm_push_type(OP_VM_BEGIN, new_expression, new_environment, (uint8_t) OP_BEGIN);
+				vm_peek().extra = closure_mode ? input->head->item : list_empty;
 			}
 
 			return;
@@ -1713,7 +1687,7 @@ void vm_step() {
 		}
 		// (vm-call <arity> (input environment))
 		case OP_VM_CALL: {
-			unsigned int arity = vm_state.call.arity;
+			uint8_t arity = top.arity;
 
 			LispNodeRC evaluated_input = list_empty;
 
@@ -1747,7 +1721,7 @@ void vm_step() {
 				evaluated_input = LispNode::make_list(evaluated_parameter_sequence.get_pointer());
 
 				vm_pop();
-				vm_push_operation(OP_VM_EVAL, evaluated_input, environment, VMState::Eval{});
+				vm_push_operation(OP_VM_EVAL, evaluated_input, environment);
 
 				return;
 			}
@@ -1789,8 +1763,8 @@ void vm_step() {
 		case OP_VM_EVAL_LIST: {
 			LispNodeRC &evaluation_items = top.input;
 
-			bool discard_intermediary = vm_state.eval_list.discard_intermediary;
-			bool &waiting = vm_state.eval_list.waiting;
+			bool discard_intermediary = (bool) top.type;
+			bool &waiting = top.waiting;
 
 			if(evaluation_items == list_empty) {
 				// An empty evaluation list does not insert anything into the data stack
@@ -1811,7 +1785,7 @@ void vm_step() {
 				vm_pop();
 			}
 
-			vm_push_operation(OP_VM_EVAL, evaluation_items->head->item, environment, VMState::Eval{});
+			vm_push_operation(OP_VM_EVAL, evaluation_items->head->item, environment);
 
 			if(last_item) {
 				return;
@@ -1832,7 +1806,7 @@ void vm_step() {
 }
 
 LispNodeRC eval_expression(const LispNodeRC input, const LispNodeRC environment) {
-	vm_push_operation(OP_VM_EVAL, input, environment, VMState::Eval{});
+	vm_push_operation(OP_VM_EVAL, input, environment);
 
 	while(vm_top > 0) {
 		if(vm_top >= EVALUATION_STACK_SIZE) {
@@ -1861,7 +1835,7 @@ void cleanup_stacks() {
 	for(unsigned int i = 0; i < vm_maximum; i++) {
 		evaluation_stack[i].input = list_empty;
 		evaluation_stack[i].environment = list_empty;
-		evaluation_stack[i].extra1 = list_empty;
+		evaluation_stack[i].extra = list_empty;
 	}
 
 	for(unsigned int i = 0; i < data_maximum; i++) {
@@ -1898,6 +1872,69 @@ void initialize_stacks() {
 	cleanup_stacks();
 }
 
+void loop_read_evaluate_print(FILE *descriptor) {
+	LispNodeRC input;
+	LispNodeRC output;
+
+	while(true) {
+		vm_reset();
+
+#ifdef OPTIONAL_MSGS
+		fputs(";* free: ", stdout);
+		print_integral(__heap_bytes_free());
+		fputs("\n", stdout);
+#endif /* OPTIONAL_MSGS */
+
+		// Interactive input: print prompt
+		if(descriptor == stdin) {
+			fputs("> ", stdout);
+		}
+
+		char *input_string = read_expression(descriptor);
+
+		if(input_string == nullptr) {
+			break;
+		}
+
+		// External input: print expression
+		if(descriptor != stdin) {
+			fputs(input_string, stdout);
+		}
+
+		if(empty_lisp_expression(input_string)) {
+			continue;
+		}
+
+		if((input = parse_expression(input_string)) == nullptr) {
+			fputs("Error reading expression\n", stdout);
+
+			cleanup();
+			vm_finish();
+
+			continue;
+		}
+
+		if((output = eval_expression(input, global_environment)) == nullptr) {
+			fputs("Error evaluating expression\n", stdout);
+
+			cleanup();
+			vm_finish();
+
+			continue;
+		}
+
+		output->print();
+		fputs("\n", stdout);
+
+		cleanup();
+		vm_finish();
+	}
+}
+
+void write_output(const LispNodeRC &expression, FILE *descriptor) {
+	expression->print(descriptor);
+}
+
 int main(int argc, char **argv) {
 #ifdef TARGET_6502
 	__set_heap_limit(LISP_HEAP_SIZE);
@@ -1930,74 +1967,7 @@ int main(int argc, char **argv) {
 
 	initialize_stacks();
 
-	while(true) {
-		vm_reset();
-
-#ifdef OPTIONAL_MSGS
-		fputs(";* free: ", stdout);
-		print_integral(__heap_bytes_free());
-		fputs("\n", stdout);
-#endif /* OPTIONAL_MSGS */
-
-		fputs("> ", stdout);
-
-		char *input_string = read_expression();
-
-		if(input_string == nullptr) {
-			Deallocate(input_string);
-			break;
-		}
-
-		if(strcmp(input_string, "\n") == 0) {
-			Deallocate(input_string);
-			continue;
-		}
-
-		LispNodeRC input;
-
-		if((input = parse_expression(input_string)) == nullptr) {
-			fputs("Error reading expression\n", stdout);
-
-			cleanup();
-			vm_finish();
-
-			continue;
-		}
-
-		LispNodeRC output;
-
-		if((output = eval_expression(input, global_environment)) == nullptr) {
-			fputs("Error evaluating expression\n", stdout);
-
-			input = nullptr;
-
-			cleanup();
-			vm_finish();
-
-			continue;
-		}
-
-		output->print();
-		fputs("\n", stdout);
-
-		input = nullptr;
-		output = nullptr;
-
-		cleanup();
-		vm_finish();
-	}
-
-	fputs("\n", stdout);
-
-	// Clears up global structures
-
-	atom_true = nullptr;
-	atom_false = nullptr;
-	list_empty = nullptr;
-	global_environment = nullptr;
-
-	cleanup();
-	vm_finish();
+	loop_read_evaluate_print(stdin);
 
 	return EXIT_SUCCESS;
 }

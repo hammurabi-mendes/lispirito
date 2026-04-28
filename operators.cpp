@@ -67,6 +67,8 @@ const char *operator_names[] = {
     "apply",
     "read",
     "write",
+    "open",
+    "close",
     "current-environment",
 
     // Low-level memory handling
@@ -158,7 +160,9 @@ ReduceMode operator_reduce_modes[] = {
     ImmediateMacro,
     ImmediateClosure,
     NormalX,
-    Normal0,
+    Normal1,
+    Normal2,
+    Normal2,
     Normal1,
     Normal0,
 
@@ -171,7 +175,6 @@ ReduceMode operator_reduce_modes[] = {
     Normal1,
 
     // VM operators
-    VM,
     VM,
     VM,
     VM,

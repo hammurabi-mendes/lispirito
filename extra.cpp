@@ -1,5 +1,5 @@
-#ifndef PRINT_HPP
-#define PRINT_HPP
+#ifndef EXTRA_HPP
+#define EXTRA_HPP
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -7,12 +7,12 @@
 
 #include "extra.h"
 
-void print_integral(Integral n) {
+void print_integral(Integral n, FILE *descriptor) {
     char buffer[MAX_NUMERIC_STRING_LENGTH];
 
     get_integral_string(n, buffer);
 
-    fputs(buffer, stdout);
+    fputs(buffer, descriptor);
 }
 
 void get_integral_string(Integral n, char *buffer) {
@@ -54,12 +54,12 @@ void get_integral_string(Integral n, char *buffer) {
     return;
 }
 
-void print_real(Real f) {
+void print_real(Real f, FILE *descriptor) {
     char buffer[MAX_NUMERIC_STRING_LENGTH];
 
     get_real_string(f, buffer);
 
-    fputs(buffer, stdout);
+    fputs(buffer, descriptor);
 }
 
 #ifdef TARGET_6502
@@ -138,4 +138,4 @@ void get_real_string(Real f, char *buffer) {
 }
 #endif /* TARGET_6502 */
 
-#endif /* PRINT_HPP */
+#endif /* EXTRA_HPP */

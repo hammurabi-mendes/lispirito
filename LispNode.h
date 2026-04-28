@@ -85,7 +85,7 @@ public:
 	void promoteReal();
 	void demoteReal();
 
-	void print() const;
+	void print(FILE *descriptor = stdout) const;
 };
 
 struct Box {

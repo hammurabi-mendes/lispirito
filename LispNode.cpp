@@ -248,65 +248,53 @@ void LispNode::demoteReal() {
 #endif /* TARGET_6502 */
 }
 
-void LispNode::print() const {
+void LispNode::print(FILE *descriptor) const {
 	switch(type) {
 		case AtomPure:
 		case AtomBoolean:
-			fputs(data, stdout);
+			fputs(data, descriptor);
 			break;
 		case AtomString:
-			fputs("\"", stdout);
-			fputs(data, stdout);
-			fputs("\"", stdout);
+			fputs("\"", descriptor);
+			fputs(data, descriptor);
+			fputs("\"", descriptor);
 			break;
 		case AtomCharacter:
-			fputs("#\\", stdout);
-			fputc(static_cast<int>(number_i), stdout);
+			fputs("#\\", descriptor);
+			fputc(static_cast<int>(number_i), descriptor);
 			break;
 		case AtomOperator:
-			fputs(operator_names[number_i], stdout);
+			fputs(operator_names[number_i], descriptor);
 			break;
 		case AtomNumericIntegral:
-			print_integral(number_i);
+			print_integral(number_i, descriptor);
 			break;
 		case AtomNumericReal:
-			print_real(number_r);
+			print_real(number_r, descriptor);
 			break;
 		case AtomData:
-			fputs("[data: ", stdout);
-			print_integral((size_t) data);
-			fputs("]", stdout);
+			fputs("[data: ", descriptor);
+			print_integral((size_t) data, descriptor);
+			fputs("]", descriptor);
 			break;
 		case List:
 			if(is_operation(OP_CLOSURE)) {
-				fputs("#", stdout);
-				fputs("closure", stdout);
+				// Print the lambda or macro associated with the closure
+				get_pointer(2)->item->print(descriptor);
 				break;
 			}
 
-			if(is_operation(OP_LAMBDA)) {
-				fputs("#", stdout);
-				fputs("lambda", stdout);
-				break;
-			}
-
-			if(is_operation(OP_MACRO)) {
-				fputs("#", stdout);
-				fputs("macro", stdout);
-				break;
-			}
-
-			fputs("(", stdout);
+			fputs("(", descriptor);
 			
 			for(Box *current = get_head_pointer(); current != nullptr; current = current->get_next_pointer()) {
-				current->item->print();
+				current->item->print(descriptor);
 
 				if(current->next != nullptr) {
-					fputs(" ", stdout);
+					fputs(" ", descriptor);
 				}
 			}
 
-			fputs(")", stdout);
+			fputs(")", descriptor);
 	}
 }
 
