@@ -30,6 +30,10 @@ else
 	LDFLAGS+=-flto
 endif
 
+ifeq ($(TARGET_LIBC_IO), 1)
+	CFLAGS+=-DTARGET_LIBC_IO
+endif
+
 PROGRAMS=lispirito
 DEPENDENCIES+=main.o LispNode.o extra.o operators.o circular_queue.o RCPointer.o Allocator.o
 

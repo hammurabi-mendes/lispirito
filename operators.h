@@ -55,15 +55,17 @@ enum LispOperation {
     OP_LET_STAR,
     OP_DEFINE,
     OP_SET_E,
-    OP_EVAL,
     OP_LAMBDA,
     OP_MACRO,
     OP_CLOSURE,
+    OP_EVAL,
     OP_APPLY,
     OP_READ,
     OP_WRITE,
     OP_OPEN,
     OP_CLOSE,
+    OP_LOAD_E,
+    OP_SAVE_E,
     OP_CURRENT_ENVIRONMENT,
 
     OP_MEM_ALLOC,
@@ -81,13 +83,13 @@ enum LispOperation {
     OP_VM_DEFINE,
     OP_VM_BEGIN,
     OP_VM_APPLY,
-    OP_VM_EVAL,
+    OP_VM_REDUCE,
     OP_VM_CALL,
-    OP_VM_EVAL_LIST,
-    OP_VM_DEFINE_LIST
+    OP_VM_DEFINE_LIST,
+    OP_VM_REDUCE_LIST
 };
 
-constexpr int NUMBER_BASIC_OPERATORS = OP_VM_EVAL_LIST + 1;
+constexpr int NUMBER_BASIC_OPERATORS = OP_VM_REDUCE_LIST + 1;
 
 enum ReduceMode : unsigned char {
     SpecialQuote,
@@ -95,7 +97,6 @@ enum ReduceMode : unsigned char {
     SpecialLogic,
     SpecialBegin,
     SpecialDefine,
-    SpecialEval,
     Normal0,
     Normal1,
     Normal2,

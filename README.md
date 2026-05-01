@@ -18,6 +18,10 @@ and other similar implementation issues.
 Importantly, the code should make evident the intricate the so-called meta-circular relationship between the `eval` (Evaluation) 
 and `apply` (Function Application) subroutines in the code, as discussed in the beautiful [Wizard Book (Structure and Interpretation of Computer Programs)](https://mitp-content-server.mit.edu/books/content/sectbyfn/books_pres_0/6515/sicp.zip/index.html). **Hence, the interpreter is written in a way to not trade clarity for performance:** the code should be pedagogical and stylish. There are always rough edges to be revised, but as much thought will be given to style and clarity as to efficiency.
 
+## Quick tutorial over features
+
+Please refer to [TUTORIAL.md](TUTORIAL.md).
+
 ## Supported features
 
 We support a a good subset of the Scheme R7RS-small specification and C-style memory operations:
@@ -35,15 +39,18 @@ We support a a good subset of the Scheme R7RS-small specification and C-style me
 - Environment and macro support: `begin`, `let`, `let*`, `set!`, `macro`, `current-environment`
 - Low-level memory operations (C-style): `mem-alloc`, `mem-read`, `mem-write`, `mem-fill`, `mem-copy`, `mem-addr`
   - Display support: `display`, `newline`
-- I/O on the Commodore 64: `open`, `close`, `read`, `write`
+- I/O and file load/save (Commodore 64 and systems with C I/O): `open`, `close`, `read`, `write`, `load!`, `save!`
 
-If you **type/paste the definitions of the functions in  [environment.lsp](environment.lsp).**, you get access to other expected routines:
-  - Functional operators: `map`, `foldl`, `foldr`, `filter`
-  - List utilities: `length`, `reverse`, `append`, `list`, `list?`
-  - Other arithmetic operators: `abs`, `modulo`
-  - String support: `list->string`, `string->list`, `string-length`, `string-append`, `string-ref`, `string-set!`, `make-string`, `substring`
-  - Function application operator: `apply`
-  - Scope and control operators: `if`, `letrec`
+Load the standard library files with `load!` to get access to additional routines:
+  | Library | Functions |
+  |---|---|
+  | `lib-funct.lsp` | `map`, `foldl`, `foldr`, `filter` |
+  | `lib-list.lsp` | `length`, `reverse`, `append`, `list`, `flatten`, `list?` |
+  | `lib-utils.lsp` | `if` |
+  | `lib-assoc.lsp` | `assoc-replace`, `assoc-delete` |
+  | `lib-math.lsp` | `abs`, `modulo` |
+  | `lib-strings.lsp` | `make-string`, `string-length`, `string-ref`, `string-set!`, `string-append`, `substring`, `string->list`, `list->string` |
+  | `lib-streams.lsp` | `stream-cons`, `stream-car`, `stream-cdr`, `stream-range`, `stream-map`, `stream-filter`, `stream-foreach`, `stream-yield` |
   
 Lambda definitions create *closures*, and `cond`, `and/or`, and `begin` are all tail-recursive (just make sure to recur in [tail-position](https://en.wikipedia.org/wiki/Tail_call)).
 
@@ -58,8 +65,7 @@ Lambda definitions create *closures*, and `cond`, `and/or`, and `begin` are all 
 
 ## Building
 
-If you are building **Lispirito** in a modern system, just a simple `make clean; make install` should work.
-To include debugging, use `make DEBUG=1` as your build command.
+If you are building **Lispirito** in a modern system, just a simple `make clean; make install` should work. If you have working `fopen`, `fclose` etc, use `make TARGET_LIBC_IO=1` to include I/O. To include debugging, use `make DEBUG=1` as your build command.
 
 If you are building for 6502 platforms, use `make clean; make TARGET_6502=1`. If you are building for the Commodore 64, use `make clean; make TARGET_6502=1 TARGET_C64=1`.
 

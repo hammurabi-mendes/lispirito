@@ -11,20 +11,6 @@ constexpr unsigned int MAX_NUMERIC_STRING_LENGTH = 32;
 constexpr unsigned int MAX_NUMERIC_STRING_LENGTH = 128;
 #endif /* TARGET_6502 */
 
-void get_integral_string(Integral n, char *buffer);
-void get_real_string(Real f, char *buffer);
-
-void print_integral(Integral n, FILE *descriptor = stdout);
-void print_real(Real f, FILE *descriptor = stdout);
-
-#define Allocate malloc
-#define Deallocate free
-
-#ifdef TARGET_6502
-char *strdup(const char *input);
-Real atof(char *input);
-#endif /* TARGET_6502 */
-
 #ifdef TARGET_C64
 	#include "c64_terminal.h"
 	#include "c64_io.h"
@@ -38,5 +24,27 @@ Real atof(char *input);
 
 	#define IO_AVAILABLE 1
 #endif // TARGET_C64
+
+#ifdef TARGET_LIBC_IO
+	#include <stdio.h>
+	#include <stdlib.h>
+	#include <string.h>
+
+	#define IO_AVAILABLE 1
+#endif // TARGET_LIBC_IO
+
+void get_integral_string(Integral n, char *buffer);
+void get_real_string(Real f, char *buffer);
+
+void print_integral(Integral n, FILE *descriptor = stdout);
+void print_real(Real f, FILE *descriptor = stdout);
+
+#define Allocate malloc
+#define Deallocate free
+
+#ifdef TARGET_6502
+char *strdup(const char *input);
+Real atof(char *input);
+#endif /* TARGET_6502 */
 
 #endif /* EXTRA_H */
