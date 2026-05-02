@@ -7,7 +7,7 @@ LispNode::LispNode(LispType type): type{type}, head{nullptr} {
 }
 
 LispNode::~LispNode() {
-	if(type == LispType::AtomPure || type == LispType::AtomBoolean || type == LispType::AtomString || type == LispType::AtomData) {
+	if(type == LispType::AtomPure || type == LispType::AtomBoolean || type == LispType::AtomString || type == LispType::AtomDataOwned) {
 		if(data != nullptr) {
 			free(data);
 		}
@@ -133,7 +133,7 @@ bool LispNode::is_numeric_real() const {
 }
 
 bool LispNode::is_data() const {
-	return (type == LispType::AtomData);
+	return (type == LispType::AtomDataOwned || type == LispType::AtomDataExternal);
 }
 
 bool LispNode::is_operation(int operator_index) const {
@@ -272,15 +272,28 @@ void LispNode::print(FILE *descriptor) const {
 		case AtomNumericReal:
 			print_real(number_r, descriptor);
 			break;
-		case AtomData:
+		case AtomDataOwned:
+		case AtomDataExternal:
 			fputs("[data: ", descriptor);
 			print_integral((size_t) data, descriptor);
 			fputs("]", descriptor);
 			break;
 		case List:
 			if(is_operation(OP_CLOSURE)) {
-				// Print the lambda or macro associated with the closure
-				get_pointer(2)->item->print(descriptor);
+				fputs("#", descriptor);
+				fputs("closure", descriptor);
+				break;
+			}
+
+			if(is_operation(OP_LAMBDA)) {
+				fputs("#", descriptor);
+				fputs("lambda", descriptor);
+				break;
+			}
+
+			if(is_operation(OP_MACRO)) {
+				fputs("#", descriptor);
+				fputs("macro", descriptor);
 				break;
 			}
 

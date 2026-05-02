@@ -712,7 +712,7 @@ LispNodeRC eval_gen1(const LispNodeRC &input, const LispNodeRC &environment) {
 			}
 
 			// Note: we do not duplicate data, only convert it in place
-			output1->type = LispType::AtomData;
+			output1->type = LispType::AtomDataOwned;
 			return output1;
 		}
 		case OP_DATA_STRING: {
@@ -733,7 +733,7 @@ LispNodeRC eval_gen1(const LispNodeRC &input, const LispNodeRC &environment) {
 			
 #ifdef IO_AVAILABLE
 			do {
-				input_string = read_expression(output1->type == LispType::AtomData ? ((FILE *) output1->data) : stdin);
+				input_string = read_expression(output1->is_data() ? ((FILE *) output1->data) : stdin);
 
 				if(input_string == nullptr) {
 					return list_empty;
@@ -752,7 +752,6 @@ LispNodeRC eval_gen1(const LispNodeRC &input, const LispNodeRC &environment) {
 			}
 
 			fclose((FILE *) output1->data);
-			output1->data = nullptr; // This is necessary because fclose frees the FILE structure
 
 			return list_empty;
 #else
@@ -760,16 +759,16 @@ LispNodeRC eval_gen1(const LispNodeRC &input, const LispNodeRC &environment) {
 #endif // IO_AVAILABLE
 #ifdef IO_AVAILABLE
 		case OP_LOAD_E:
-			global_descriptor_input = (output1->type == LispType::AtomData ? ((FILE *) output1->data) : stdin);
+			global_descriptor_input = (output1->is_data() ? ((FILE *) output1->data) : stdin);
 
 			return list_empty;
 		case OP_SAVE_E:
-			global_descriptor_output = (output1->type == LispType::AtomData ? ((FILE *) output1->data) : stdout);
+			global_descriptor_output = (output1->is_data() ? ((FILE *) output1->data) : stdout);
 
 			return list_empty;
 #endif // IO_AVAILABLE
 		case OP_MEM_ALLOC:
-			result = new LispNode(LispType::AtomData);
+			result = new LispNode(LispType::AtomDataOwned);
 			result->data = static_cast<char *>(malloc(output1->number_i));
 
 			break;
@@ -882,14 +881,14 @@ LispNodeRC eval_gen2(const LispNodeRC &input, const LispNodeRC &environment) {
 				return nullptr;
 			}
 
-			return LispNode::make_data(LispType::AtomData, static_cast<void *>(descriptor));
+			return LispNode::make_data(LispType::AtomDataExternal, static_cast<void *>(descriptor));
 #else
 			break;
 #endif //IO_AVAILABLE
 		}
     	case OP_WRITE: {
 #ifdef IO_AVAILABLE
-			output1->print(output2->type == LispType::AtomData ? ((FILE *) output2->data) : stdout);
+			output1->print(output2->is_data() ? ((FILE *) output2->data) : stdout);
 #else
 			output1->print(stdout);
 #endif //IO_AVAILABLE

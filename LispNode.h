@@ -25,7 +25,8 @@ enum LispType : unsigned char {
 	AtomOperator,
 	AtomNumericIntegral,
 	AtomNumericReal,
-	AtomData,
+	AtomDataOwned,    // Freed upon deletion
+	AtomDataExternal, // Not freed upon deletion
 	List
 };
 
