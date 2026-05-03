@@ -731,7 +731,6 @@ LispNodeRC eval_gen1(const LispNodeRC &input, const LispNodeRC &environment) {
 		case OP_READ: {
 			char *input_string;
 			
-#ifdef IO_AVAILABLE
 			do {
 				input_string = read_expression(output1->is_data() ? ((FILE *) output1->data) : stdin);
 
@@ -739,14 +738,11 @@ LispNodeRC eval_gen1(const LispNodeRC &input, const LispNodeRC &environment) {
 					return list_empty;
 				}
 			} while(empty_lisp_expression(input_string));
-#else
-				input_string = read_expression(stdin);
-#endif // IO_AVAILABLE
 
 			return parse_expression(input_string);
 		}
-		case OP_CLOSE:
 #ifdef IO_AVAILABLE
+		case OP_CLOSE:
 			if(!output1->is_data()) {
 				return nullptr;
 			}
@@ -754,10 +750,6 @@ LispNodeRC eval_gen1(const LispNodeRC &input, const LispNodeRC &environment) {
 			fclose((FILE *) output1->data);
 
 			return list_empty;
-#else
-			break;
-#endif // IO_AVAILABLE
-#ifdef IO_AVAILABLE
 		case OP_LOAD_E:
 			global_descriptor_input = (output1->is_data() ? ((FILE *) output1->data) : stdin);
 
@@ -869,8 +861,8 @@ LispNodeRC eval_gen2(const LispNodeRC &input, const LispNodeRC &environment) {
 
 			return atom_true;
 		}
-		case OP_OPEN: {
 #ifdef IO_AVAILABLE
+		case OP_OPEN: {
 			if(!output1->is_string() || !output2->is_string()) {
 				return nullptr;
 			}
@@ -882,16 +874,10 @@ LispNodeRC eval_gen2(const LispNodeRC &input, const LispNodeRC &environment) {
 			}
 
 			return LispNode::make_data(LispType::AtomDataExternal, static_cast<void *>(descriptor));
-#else
-			break;
-#endif //IO_AVAILABLE
 		}
-    	case OP_WRITE: {
-#ifdef IO_AVAILABLE
-			output1->print(output2->is_data() ? ((FILE *) output2->data) : stdout);
-#else
-			output1->print(stdout);
 #endif //IO_AVAILABLE
+    	case OP_WRITE: {
+			output1->print(output2->is_data() ? ((FILE *) output2->data) : stdout);
 
 			return list_empty;
 		}
@@ -1080,17 +1066,23 @@ struct VMStackFrame {
 	                saved_context_environment{nullptr}, extra{nullptr} {}
 };
 
-constexpr int EVALUATION_STACK_SIZE = 128;
-constexpr int DATA_STACK_SIZE = 128;
+#ifdef TARGET_6502
+	using StackSizeType = uint8_t;
+#else
+	using StackSizeType = unsigned int;
+#endif
+
+constexpr StackSizeType EVALUATION_STACK_SIZE = 128;
+constexpr StackSizeType DATA_STACK_SIZE = 128;
 
 VMStackFrame *evaluation_stack;
 LispNodeRC *data_stack;
 
-unsigned int vm_top;
-unsigned int data_top;
+StackSizeType vm_top;
+StackSizeType data_top;
 
-unsigned int vm_maximum;
-unsigned int data_maximum;
+StackSizeType vm_maximum;
+StackSizeType data_maximum;
 
 VMStackFrame *vm_push_operation(int8_t op, const LispNodeRC &input, const LispNodeRC &environment) {
 	VMStackFrame *frame = &evaluation_stack[vm_top];
@@ -1587,7 +1579,7 @@ void vm_step() {
 				LispNodeRC evaluated_input = list_empty;
 
 				if(closure_mode == true) {
-					for(unsigned int i = 0; i < arity; i++) {
+					for(uint8_t i = 0; i < arity; i++) {
 						evaluated_input = make_cons(data_peek(), evaluated_input);
 						data_pop();
 					}
@@ -1865,13 +1857,13 @@ LispNodeRC eval_expression(const LispNodeRC input, const LispNodeRC environment)
 }
 
 void cleanup_stacks() {
-	for(unsigned int i = 0; i < vm_maximum; i++) {
+	for(StackSizeType i = 0; i < vm_maximum; i++) {
 		evaluation_stack[i].input = list_empty;
 		evaluation_stack[i].environment = list_empty;
 		evaluation_stack[i].extra = list_empty;
 	}
 
-	for(unsigned int i = 0; i < data_maximum; i++) {
+	for(StackSizeType i = 0; i < data_maximum; i++) {
 		data_stack[i] = list_empty;
 	}
 }
@@ -1906,6 +1898,11 @@ void initialize_stacks() {
 }
 
 void loop_read_evaluate_print(FILE *descriptor_input, FILE *descriptor_output) {
+	constexpr int MAXIMUM_INPUT_CONTEXTS = 8;
+
+	static FILE *backup_descriptor_inputs[MAXIMUM_INPUT_CONTEXTS];
+	int context_position = 0;
+
 	bool interactive_input = (descriptor_input == stdin);
 
 	LispNodeRC input;
@@ -1913,7 +1910,7 @@ void loop_read_evaluate_print(FILE *descriptor_input, FILE *descriptor_output) {
 
 	while(true) {
 		if(interactive_input) {
-			cleanup();
+			cleanup_stacks();
 			vm_reset();
 		}
 
@@ -1926,10 +1923,13 @@ void loop_read_evaluate_print(FILE *descriptor_input, FILE *descriptor_output) {
 		// If a (load! fd) operation changed the global input descriptor,
 		// obtain the input from that descriptor then return to the current input descriptor
 		if(descriptor_input != global_descriptor_input) {
-			loop_read_evaluate_print(global_descriptor_input, descriptor_output);
-			global_descriptor_input = descriptor_input;
+			if(context_position < MAXIMUM_INPUT_CONTEXTS) {
+				backup_descriptor_inputs[context_position++] = descriptor_input;
+				descriptor_input = global_descriptor_input;
 
-			continue;
+				interactive_input = (descriptor_input == stdin);
+				continue;
+			}
 		}
 
 #ifdef OPTIONAL_MSGS
@@ -1946,6 +1946,13 @@ void loop_read_evaluate_print(FILE *descriptor_input, FILE *descriptor_output) {
 		char *input_string = read_expression(descriptor_input);
 
 		if(input_string == nullptr) {
+			if(context_position > 0) {
+				global_descriptor_input = backup_descriptor_inputs[--context_position];
+
+				interactive_input = (descriptor_input == stdin);
+				continue;
+			}
+
 			break;
 		}
 
